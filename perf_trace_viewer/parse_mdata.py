@@ -23,10 +23,13 @@
 import re
 import unittest
 from collections import namedtuple
-from typing import IO, Dict, Tuple
+from typing import IO, Dict, Optional, Tuple
 
 # Roughly parse out a line from /proc/<pid>/stat.
 STAT = re.compile(r"^(\d+) \((.*)\) (\w) ([\d -]+)$")
+
+# Optional executable path and command-line bytes emitted after a stat record.
+PROC_DETAILS = re.compile(r"^## proc (\d+) ([0-9a-f]*) ([0-9a-f]*)$")
 
 # Named tuple for the fields in /proc/<pid>/stat. Thanks, CoPilot!
 # fmt: off
@@ -38,19 +41,43 @@ ProcStat = namedtuple("ProcStat", (
     "startstack", "kstkesp", "kstkeip", "signal", "blocked", "sigignore",
     "sigcatch", "wchan", "nswap", "cnswap", "exit_signal", "processor",
     "rt_priority", "policy", "delayacct_blkio_ticks", "guest_time",
-    "cguest_time", "start_data", "end_data", "start_brk", "arg_start",
-    "arg_end", "env_start", "env_end", "exit_code"
-))
+     "cguest_time", "start_data", "end_data", "start_brk", "arg_start",
+    "arg_end", "env_start", "env_end", "exit_code", "exe", "cmdline"
+), defaults=(None, None))
 # fmt: on
+
+
+# Decode a hex-encoded procfs field, preserving otherwise-invalid UTF-8 bytes.
+def decode_proc_field(encoded: str) -> str:
+    return bytes.fromhex(encoded).decode("utf-8", errors="surrogateescape")
+
+
+# Decode the NUL-separated argument vector from /proc/<pid>/cmdline.
+def decode_cmdline(encoded: str) -> Tuple[str, ...]:
+    raw_args = bytes.fromhex(encoded).split(b"\0")
+    if raw_args and raw_args[-1] == b"":
+        raw_args.pop()
+    return tuple(arg.decode("utf-8", errors="surrogateescape") for arg in raw_args)
 
 
 # Parse the mdata file.
 def parse_mdata(raw_input: IO[bytes]) -> Tuple[Dict[str, str], Dict[int, ProcStat]]:
-    mdata = {}
-    procs = {}
+    mdata: Dict[str, str] = {}
+    procs: Dict[int, ProcStat] = {}
     for rawline in raw_input:
         line = rawline.decode("utf-8")
-        if line.startswith("## "):
+        if line.startswith("## proc "):
+            details = PROC_DETAILS.match(line.rstrip("\n"))
+            assert details is not None
+            pid = int(details.group(1))
+            if pid in procs:
+                exe: Optional[str] = (
+                    decode_proc_field(details.group(2)) if details.group(2) else None
+                )
+                procs[pid] = procs[pid]._replace(
+                    exe=exe, cmdline=decode_cmdline(details.group(3))
+                )
+        elif line.startswith("## "):
             # comment
             pass
         elif line.startswith("# "):
@@ -72,7 +99,9 @@ def parse_mdata(raw_input: IO[bytes]) -> Tuple[Dict[str, str], Dict[int, ProcSta
             # Parse line at least into suitable types - don"t fully decode at
             # this stage since we don"t know which fields will actually be used.
             pid = int(m.group(1))
-            comm = m.group(2)  # program name, truncated to 16 chars
+            # TASK_COMM_LEN is 16 bytes including the terminating NUL, so at
+            # most 15 bytes of the program name are visible here.
+            comm = m.group(2)
             state = m.group(3)  # state, eg R for running, S for sleeping
             rest = [int(x) for x in m.group(4).split()]  # rest are ints
             procs[pid] = ProcStat(pid, comm, state, *rest)
@@ -156,7 +185,9 @@ class TestParseMdata(unittest.TestCase):
 10237 (ssh_server) S 3901 10237 42 0 -1 4202752 7386 10556 0 1 67 14 65 15 20 0 12 0 34223 8826036224 6216 18446744073709551615 94165094514688 94165094747684 140724922712336 140724922710704 140635724155715 0 88583 0 17582 18446744073709551615 0 0 17 0 0 0 0 0 0 94165096844840 94165096873280 94165117935616 140724922718949 140724922718960 140724922718960 140724922720228 0
 ## after
 1 (init) S 0 1 1 34816 1 4202752 2750 3190270 1 559 2 14 7921 2767 20 0 1 0 22698 28897280 480 18446744073709551615 94075734745088 94075735046540 140731912490512 140731912489592 140174869709891 0 0 4096 536962595 18446744071765192153 0 0 17 3 0 0 0 0 0 94075737145592 94075737155264 94075757477888 140731912494870 140731912494881 140731912494881 140731912495085 0
+## proc 1 2f7362696e2f696e6974 2f7362696e2f696e6974002d2d73797374656d00
 10236 (wanphy_proc) S 3901 10236 3806 0 -1 4202752 5174 1808 0 0 38 7 0 0 20 0 6 0 34222 8171171840 4333 18446744073709551615 93970763452416 93970763463572 140723891487136 140723891485840 140083330865987 0 0 0 17582 18446744073709551615 0 0 17 2 0 0 0 0 0 93970765561856 93970765563680 93970770280448 140723891489507 140723891489519 140723891489519 140723891490787 0
+## proc 10236  2f7573722f62696e2f77616e70687900
 10237 (ssh_server) S 3901 10237 3806 0 -1 4202752 7386 10556 0 1 67 14 65 15 20 0 12 0 34223 8826036224 6216 18446744073709551615 94165094514688 94165094747684 140724922712336 140724922710704 140635724155715 0 88583 0 17582 18446744073709551615 0 0 17 0 0 0 0 0 0 94165096844840 94165096873280 94165117935616 140724922718949 140724922718960 140724922718960 140724922720228 0
 10238 (ssh_backup_serv) S 3901 10238 3806 0 -1 4202752 6298 1810 0 0 59 9 0 0 20 0 9 0 34223 8595910656 5380 18446744073709551615 94686349664256 94686349760644 140721224446864 140721224445456 140667692329795 0 88583 0 17582 18446744073709551615 0 0 17 1 0 0 0 0 0 94686351857800 94686351875360 94686377046016 140721224452823 140721224452841 140721224452841 140721224454109 0
 """
@@ -173,6 +204,12 @@ class TestParseMdata(unittest.TestCase):
         mdata, procs = parse_mdata(io.BytesIO(raw_input))
         self.assertEqual(mdata, expected_mdata)
         self.assertEqual(len(procs), 4)
+        self.assertEqual(procs[1].exe, "/sbin/init")
+        self.assertEqual(procs[1].cmdline, ("/sbin/init", "--system"))
+        self.assertIsNone(procs[10236].exe)
+        self.assertEqual(procs[10236].cmdline, ("/usr/bin/wanphy",))
+        self.assertIsNone(procs[10237].cmdline)
+        self.assertEqual(decode_cmdline(""), ())
 
     def test_extract_kernel_version(self) -> None:
         # Test various kernel version formats

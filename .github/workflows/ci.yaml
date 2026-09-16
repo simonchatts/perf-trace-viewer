@@ -27,8 +27,16 @@ jobs:
       - name: Unit tests for parse_mdata.py
         run: python3 perf_trace_viewer/parse_mdata.py
 
+      - name: Unit tests for quantized.py
+        run: python3 perf_trace_viewer/quantized_test.py
+
       - name: Install dependencies
-        run: pip install mypy black isort pylint
+        run: pip install mypy black isort pylint ruff
+
+      - name: Check changed Python with Ruff
+        run: |
+          ruff check --select E,F,I perf_trace_viewer/quantized.py perf_trace_viewer/quantized_test.py perf_trace_viewer/__main__.py perf_trace_viewer/parse_jsonl.py
+          ruff format --check perf_trace_viewer/quantized.py perf_trace_viewer/quantized_test.py perf_trace_viewer/__main__.py perf_trace_viewer/parse_jsonl.py
 
       - name: Check types
         run: mypy --strict perf_trace_viewer
@@ -48,6 +56,28 @@ jobs:
           # (using dash as an approximate stand-in for POSIX /bin/sh)
           shellcheck collect &&
           shellcheck --shell=dash collect
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Check and build the web viewer
+        run: |
+          npm ci
+          npm run format:check
+          npm run typecheck
+          npm run build
+          grep -Eq 'assets/index-[^" ]+\.js' dist/sw.js
+          grep -Eq 'assets/index-[^" ]+\.css' dist/sw.js
+          grep -q 'index.html' dist/sw.js
+          grep -q 'manifest.webmanifest' dist/sw.js
+          test -x dist/serve_ui.py
+          python3 dist/serve_ui.py --help
+
+      - name: Package the static web viewer
+        run: tar -C dist -czf perf-trace-viewer-web.tar.gz .
 
       - name: Prepare standalone scripts
         run: |
@@ -69,6 +99,7 @@ jobs:
           files: |
             collect
             zipped/perf_trace_viewer
+            perf-trace-viewer-web.tar.gz
 
 permissions:
   contents: write

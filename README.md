@@ -1,6 +1,6 @@
 ![CI](https://github.com/cisco-open/perf-trace-viewer/workflows/Main%20branch%20CI/badge.svg)
 
-# Visualize thread scheduling data as Trace Events
+# Visualize thread scheduling data
 
 This tool lets you visualize how a Linux system is scheduling threads over time:
 
@@ -8,8 +8,10 @@ This tool lets you visualize how a Linux system is scheduling threads over time:
 
 It uses one collection script (wrapping `perf sched record`) on the target
 system, to record the data (eg for 10 seconds), and then a second script to
-convert this into Trace Event format. This can be visualized in eg Chrome's
-Trace Viewer.
+convert this into either detailed Trace Event format or a compact, time-quantized
+format for the bundled web viewer. The quantized format is intended for much
+longer recordings where individual scheduling events are too detailed to be
+useful.
 
 The collection script is a portable shell script, that should be compatible with
 any Linux system supporting `perf`. The conversion script requires Python 3.10
@@ -37,6 +39,65 @@ The tool has a three step workflow:
 
  - Visualize the data. eg in Chrome, open `chrome://tracing` and load the output
    file you just converted.
+
+## Quantized viewer for long traces
+
+Use `--quantized` to aggregate scheduling into one-second samples, with small
+per-process contributions folded into an `other` segment:
+
+    ./perf_trace_viewer --quantized input.tar.xz trace.quantized.json
+
+The sample duration and squelch threshold are configurable. For example, this
+uses 200 ms samples and keeps per-process contributions of at least 2.5%:
+
+    ./perf_trace_viewer --quantized --quantum 0.2 --squelch 2.5 \
+      input.tar.xz trace.quantized.json
+
+Collected archives may be plain or compressed tar files. The perf script member
+may also be gzip-compressed as `perf.data.txt.gz`; both forms are read
+transparently.
+
+Quantized mode streams the source and skips wakeup, waiting-track,
+runtime-accounting, and detailed Trace Event construction work that the browser
+does not need. It retains only lightweight fork/exit identity bookkeeping and
+reads runtime records only for namespace-aware PID mapping. Its output is a
+sparse JSON object using the versioned
+`perf-trace-viewer.quantized/v1` schema. Each CPU contains only non-empty
+quanta, whose stack entries reference the top-level process array by index;
+index `-1` is the `other` bucket. The process metadata includes all known
+threads and their CPU-time totals. See the
+[quantized format documentation](docs/quantized-format.md) for the complete
+contract.
+
+To run the viewer during development:
+
+    npm install
+    npm run dev
+
+For a portable local server, download and extract
+`perf-trace-viewer-web.tar.gz` from the release. It includes the compiled UI and
+an executable Python 3 server script (no extra Python packages required):
+
+    tar -xzf perf-trace-viewer-web.tar.gz
+    ./serve_ui.py
+
+Then open <http://127.0.0.1:8000/>. You can choose another listening address
+and port with `./serve_ui.py --host 0.0.0.0 --port 9000`. The server script can
+also be run with `python3 serve_ui.py` if executable permissions were not
+preserved while extracting the archive.
+
+Load a local JSON file with the file picker. A static deployment can keep the
+application and datasets together; build with `npm run build`, copy a dataset
+into `dist`, then link to it with a relative query parameter:
+
+    https://example.net/perf/?data=trace.quantized.json
+
+The production application shell is an installable offline-capable PWA. Trace
+datasets are deliberately not added to its cache because they may be very
+large and change independently of the viewer. For a static deployment, serve
+hashed files below `assets/` with long-lived immutable caching, and serve
+`index.html`, `sw.js`, and `manifest.webmanifest` with revalidation or a short
+cache lifetime.
 
 The `perf_trace_viewer` script is just a
 [zipapp](https://docs.python.org/3/library/zipapp.html) (zipped set of `.py`
@@ -66,6 +127,29 @@ The `collect` script can pass any arguments to `perf sched record` via `-o`. For
 example, to record 10 seconds of data only on CPU cores 0, 2 and 3, you can run:
 
     ./collect -o "-C 0,2-3" 10
+
+The collector can also augment the scheduling trace with application-specific events from userspace [SDT points](https://sourceware.org/systemtap/wiki/AddingUserSpaceProbingToApps), such as startup stages or configuration transitions.
+Linux `perf` can expose these statically compiled markers as trace events using its [SDT support](https://lwn.net/Articles/570818/).
+
+Pass each executable or shared library containing SDT points with `--sdt-object`.
+The option may be repeated, and the collector discovers and records every SDT provider and probe embedded in the supplied objects:
+
+    sudo ./collect \
+      --sdt-object /opt/myapp/bin/controller \
+      --sdt-object /opt/myapp/lib/libconfiguration.so \
+      10
+
+SDT discovery uses an isolated temporary `perf` build-ID cache.
+By default, the collector creates that cache under `${TMPDIR:-/tmp}` and removes it when collection finishes.
+Use the optional `--buildid-dir` argument when the cache should live on a different filesystem, for example when `/tmp` has limited space:
+
+    sudo ./collect \
+      --buildid-dir /var/tmp/perf-buildid \
+      --sdt-object /opt/myapp/bin/controller \
+      10
+
+Both arguments are optional.
+Without `--sdt-object`, the script skips SDT discovery and performs the normal scheduler-only collection.
 
 ### How do I resolve errors from the `collect` script?
 
@@ -137,13 +221,6 @@ inadquate for the task here. For example:
 
 - `perf script` does not make it easy to do things like add the CPU/kernel
   pseudo-processes noted above.
-
-### Can I augment the visuation with extra data, such as arrows for IPC calls?
-
-This is not supported yet, but is a possible future enhancement (using [perf's
-support](https://lwn.net/Articles/570818/) for [SDT
-points](https://sourceware.org/systemtap/wiki/AddingUserSpaceProbingToApps) for
-instrumenting the IPC calls).
 
 ### How do I make a new release?
 

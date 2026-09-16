@@ -25,12 +25,14 @@
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 from unittest import TestCase
 
 # All possible records
-Record = Union["SchedRecord", "CommRecord", "ForkRecord", "ExitRecord"]
+Record = Union[
+    "SchedRecord", "SdtRecord", "CommRecord", "ForkRecord", "ExitRecord"
+]
 
 
 # Main export of this module: parse a line into a structured object if possible.
@@ -42,6 +44,26 @@ def parse(line: str) -> Optional[Record]:
     if msched is not None:
         args = [msched.group(i) for i in range(1, 8)]
         return SchedRecord.parse(*args)
+
+    # SDT markers share the normal trace-event envelope but are not sched
+    # records or PERF_RECORD_* metadata.
+    msdt = SDT_RE.match(line)
+    if msdt is not None:
+        secs, nsecs = int(msdt.group(4)), int(msdt.group(5))
+        sdt_args = {
+            name: int(value)
+            for name, value in SDT_ARG_RE.findall(msdt.group(8) or "")
+        }
+        return SdtRecord(
+            name=msdt.group(7),
+            opid=int(msdt.group(1)),
+            otid=int(msdt.group(2)),
+            cpu=int(msdt.group(3)),
+            ts=secs * 1_000_000_000 + nsecs,
+            arg1=sdt_args.get("arg1"),
+            args=sdt_args,
+            category=f"sdt_{msdt.group(6)}",
+        )
 
     # If that fails, then try a PERF_RECORD_* match
     mperf = PERF_RECORD_RE.match(line)
@@ -81,6 +103,15 @@ def parse(line: str) -> Optional[Record]:
 SCHED_RE = re.compile(
     r" *([\d-]+)/([\d-]+) +\[0*(\d+)\] +(\d+)\.(\d+): +sched:(\w+): (.*)$"
 )
+
+# SDT providers and probes use colon-separated names in perf script output.
+SDT_RE = re.compile(
+    r" *([\d-]+)/([\d-]+) +\[0*(\d+)\] +(\d+)\.(\d+): +"
+    r"sdt_([^:\s]+):([^:\s]+): "
+    r"\([0-9a-fA-F]+\)(?: +(.*))?$"
+)
+
+SDT_ARG_RE = re.compile(r"(?:^|\s)(arg\d+)=(-?\d+)(?=\s|$)")
 
 
 # Base regexp for any PERF_RECORD_*, consuming the entire line. eg:
@@ -187,6 +218,29 @@ WEIRD_SCHED_SWITCH_RE = re.compile(
 #                     ^^^^^^^^^ ^^^^  ^^^                ^^^
 #                      comm     pid   prio               cpu
 WEIRD_SCHED_WAKEUP_RE = re.compile(r"(.*?):(\d+) \[(\d+)\] .*? CPU:(\d+)$")
+
+
+# A userspace marker from perf's SDT stream.
+@dataclass
+class SdtRecord:
+    name: str
+    opid: int
+    otid: int
+    cpu: int
+    ts: int
+    arg1: Optional[int]
+    category: str = "sdt_processmgr"
+    args: Dict[str, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # Preserve the legacy arg1-only constructor while normalizing parsed
+        # records to the complete named argument mapping.
+        if not self.args and self.arg1 is not None:
+            self.args["arg1"] = self.arg1
+
+
+# Keep the old name as a source-compatible alias for process-manager callers.
+SdtProcessManagerRecord = SdtRecord
 
 
 #
@@ -412,6 +466,38 @@ class SchedRecordTest(ParseTestCase):
                 "next_prio": "120",
             },
         ),
+    ]
+
+
+class SdtProcessManagerRecordTest(ParseTestCase):
+    lines = [
+        "   6042/6042 [000] 54.058965674: sdt_processmgr:startup: (56352bfee885)",
+        "   6042/6056 [003] 116.008774770: sdt_processmgr:band_begin: "
+        "(56352c06f6e5) arg1=99900",
+        "   6120/6135 [003] 86.144335136: sdt_processmgr:band_remaining: "
+        "(56513556f889) arg1=11297 arg2=11320 arg3=11340 arg4=11347 arg5=0",
+        "   6042/6056 [002] 118.337286900: sdt_processmgr:boot_complete: "
+        "(56352c07076c)",
+    ]
+    expected = [
+        SdtProcessManagerRecord("startup", 6042, 6042, 0, 54058965674, None),
+        SdtProcessManagerRecord("band_begin", 6042, 6056, 3, 116008774770, 99900),
+        SdtProcessManagerRecord(
+            "band_remaining",
+            6120,
+            6135,
+            3,
+            86144335136,
+            11297,
+            args={
+                "arg1": 11297,
+                "arg2": 11320,
+                "arg3": 11340,
+                "arg4": 11347,
+                "arg5": 0,
+            },
+        ),
+        SdtProcessManagerRecord("boot_complete", 6042, 6056, 2, 118337286900, None),
     ]
 
 

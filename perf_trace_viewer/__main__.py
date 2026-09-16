@@ -16,9 +16,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# Convert linux `perf sched` data to Chrome Trace Event format.
+# Convert Linux `perf sched` data to detailed or quantized visualization data.
 #
 # Run as in: perf_trace_viewer <input-file> <output-file>
+# Or: perf_trace_viewer --quantized --quantum 0.2 <input-file> <output-file>
 
 import sys
 
@@ -26,14 +27,21 @@ if sys.version_info < (3, 10):
     print("ERROR: python 3.10 or later required", file=sys.stderr)
     sys.exit(1)
 
+import gzip
 import json
 import logging
+import math
 import tarfile
+import zlib
 from argparse import ArgumentParser, Namespace
-from typing import IO, Iterable, Mapping, NoReturn, Sequence
+from typing import IO, Iterable, Literal, Mapping, NoReturn, Optional, Sequence, Union
 
 from engine import process_perf_data
+from parse_jsonl import process_jsonl_data
 from parse_mdata import parse_mdata
+from quantized import process_quantized_perf_data
+
+Output = Union[Sequence[Mapping[str, object]], Mapping[str, object]]
 
 
 # Main entrypoint
@@ -53,10 +61,37 @@ def main() -> None:
 # Process command-line options
 def get_opts() -> Namespace:
     parser = ArgumentParser(
-        description="Convert collected `perf sched` data to Chrome Trace Event format"
+        description=(
+            "Convert collected `perf sched` data for detailed or quantized viewing"
+        )
     )
     parser.add_argument("input_filename", help="perf data input")
     parser.add_argument("output_filename", help="JSON output file")
+    parser.add_argument(
+        "--jsonl",
+        action="store_true",
+        help="Treat input as tspn JSONL instead of collected perf tar data",
+    )
+    parser.add_argument(
+        "-q",
+        "--quantized",
+        action="store_true",
+        help="Generate sparse quantized CPU data for the web viewer",
+    )
+    parser.add_argument(
+        "--quantum",
+        type=float,
+        default=1.0,
+        metavar="SECONDS",
+        help="Duration of each quantized sample (default: 1.0)",
+    )
+    parser.add_argument(
+        "--squelch",
+        type=float,
+        default=5.0,
+        metavar="PERCENT",
+        help="Fold smaller per-process contributions into other (default: 5.0)",
+    )
     parser.add_argument(
         "-s",
         "--skip",
@@ -78,40 +113,103 @@ def get_opts() -> Namespace:
         default=3.0,
         help="Threshold (in ms) for tasks to appear in the waiting track",
     )
-    return parser.parse_args()
+    opts = parser.parse_args()
+    if not math.isfinite(opts.quantum) or opts.quantum < 0.000000001:
+        parser.error("--quantum must be at least one nanosecond")
+    if not math.isfinite(opts.squelch) or opts.squelch < 0 or opts.squelch > 100:
+        parser.error("--squelch must be between 0 and 100")
+    if not opts.quantized and (opts.quantum != 1.0 or opts.squelch != 5.0):
+        parser.error("--quantum and --squelch require --quantized")
+    if opts.jsonl and opts.quantized:
+        parser.error("--quantized does not support --jsonl input")
+    return opts
 
 
 # Run the engine on either compressed test data, or a real perf data file
-def process_file(opts: Namespace) -> Sequence[Mapping[str, object]]:
-    # Open the input file as a tarfile - the library will handle compression.
+def process_file(opts: Namespace) -> Output:
+    if opts.jsonl:
+        if opts.skip or opts.duration or opts.wait != 3.0:
+            logging.warning("--skip/--duration/--wait are ignored with --jsonl")
+        with open(opts.input_filename, encoding="utf-8") as f:
+            return process_jsonl_data(f)
+
+    # Use filename suffixes to select gzip and uncompressed tar explicitly;
+    # keep transparent detection for other supported compression formats.
     # There should be exactly two files, in this order:
     #   - perf-mdata.txt (containing metadata)
-    #   - perf.data.txt (containing the output of perf script)
+    #   - perf.data.txt or perf.data.txt.gz (containing the output of perf script)
     # We fully read in the mdata, then start streaming the perf data.
-    tar = tarfile.open(opts.input_filename)
-    mdata, proc_info, result = None, None, None
-    for member in tar.getmembers():
-        if member.name == "perf-mdata.txt":
-            mdata, proc_info = parse_mdata(extract(tar, member))
-        elif member.name == "perf.data.txt":
-            if mdata is None or proc_info is None:
-                die("ERROR: perf-mdata.txt not early enough - possible corruption?")
-            lines = stream(extract(tar, member))
-            # Send the stream to the engine, along with everything else it needs
-            result = process_perf_data(
-                lines, mdata, proc_info, opts.skip, opts.duration, opts.wait
-            )
+    tar_mode: Literal["r:gz", "r:", "r:*"] = (
+        "r:gz"
+        if opts.input_filename.endswith(".gz")
+        else "r:"
+        if opts.input_filename.endswith(".tar")
+        else "r:*"
+    )
+    try:
+        with tarfile.open(opts.input_filename, mode=tar_mode) as tar:
+            mdata, proc_info = None, None
+            result: Optional[Output] = None
+            for member in tar.getmembers():
+                if member.name == "perf-mdata.txt":
+                    mdata, proc_info = parse_mdata(extract(tar, member))
+                elif member.name in ("perf.data.txt", "perf.data.txt.gz"):
+                    if mdata is None or proc_info is None:
+                        die(
+                            "ERROR: perf-mdata.txt not early enough - "
+                            "possible corruption?"
+                        )
+                    lines = stream_perf_data(tar, member)
+                    # Send the stream to the engine, along with everything else it needs
+                    if opts.quantized:
+                        if opts.wait != 3.0:
+                            logging.warning("--wait is ignored with --quantized")
+                        result = process_quantized_perf_data(
+                            lines,
+                            mdata,
+                            proc_info,
+                            opts.skip,
+                            opts.duration,
+                            opts.quantum,
+                            opts.squelch,
+                        )
+                    else:
+                        result = process_perf_data(
+                            lines, mdata, proc_info, opts.skip, opts.duration, opts.wait
+                        )
+    except (tarfile.TarError, gzip.BadGzipFile, EOFError, zlib.error) as error:
+        die(
+            f"ERROR: cannot read perf data archive '{opts.input_filename}': {error}",
+            "The archive or compressed perf data appears truncated or corrupt; "
+            "verify it with "
+            "'tar -t' (and the compressor's integrity check) and collect it again "
+            "if necessary.",
+        )
 
     if result is None:
-        die("ERROR: perf.data.txt missing from tarfile - possible corruption?")
+        die(
+            "ERROR: perf.data.txt or perf.data.txt.gz missing from tarfile - "
+            "possible corruption?"
+        )
     else:
         return result
 
 
-# Stream an IO object line by line
-def stream(f: IO[bytes]) -> Iterable[str]:
+# Stream any binary line iterator as decoded perf-script text.
+def stream(f: Iterable[bytes]) -> Iterable[str]:
     for line in f:
         yield line.decode("utf-8")
+
+
+# Stream either the plain or gzip-compressed perf script member without loading
+# the potentially very large member into memory.
+def stream_perf_data(tar: tarfile.TarFile, member: tarfile.TarInfo) -> Iterable[str]:
+    raw = extract(tar, member)
+    if member.name.endswith(".gz"):
+        with gzip.GzipFile(fileobj=raw, mode="rb") as decompressed:
+            yield from stream(decompressed)
+    else:
+        yield from stream(raw)
 
 
 # Extract a member of a tarfile

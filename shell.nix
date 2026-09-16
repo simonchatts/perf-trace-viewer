@@ -26,5 +26,6 @@ mkShell {
     black
     shellcheck
     xz
+    nodejs
   ];
 }
