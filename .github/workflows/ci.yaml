@@ -44,11 +44,7 @@ jobs:
         run: mypy --strict perf_trace_viewer
 
       - name: Check the collection script
-        run: |
-          # Run shellcheck twice, for both bash, and POSIX /bin/sh
-          # (using dash as an approximate stand-in for POSIX /bin/sh)
-          shellcheck collect &&
-          shellcheck --shell=dash collect
+        run: shellcheck --shell=bash collect
 
       - name: Set up Node.js
         uses: actions/setup-node@v6

@@ -13,9 +13,8 @@ format for the bundled web viewer. The quantized format is intended for much
 longer recordings where individual scheduling events are too detailed to be
 useful.
 
-The collection script is a portable shell script, that should be compatible with
-any Linux system supporting `perf`. The conversion script requires Python 3.10
-or later.
+The collection script requires Bash and should work on Linux systems supporting
+`perf`. The conversion script requires Python 3.10 or later.
 
 ## Usage
 
@@ -228,4 +227,3 @@ inadquate for the task here. For example:
  - Tag the release commit (eg `git tag v1.0`)
  - Push it to GitHub (eg `git push origin main v1.0`)
  - If CI passes, then a release will be created with downloadable scripts
-
