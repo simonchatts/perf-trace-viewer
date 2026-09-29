@@ -49,6 +49,7 @@ export function App() {
   const [error, setError] = useState("");
   const [datasetName, setDatasetName] = useState("");
   const [selectedProcess, setSelectedProcess] = useState<number | null>(null);
+  const [zoomLimitReached, setZoomLimitReached] = useState(false);
   const [fitPixelsPerQuantum, setFitPixelsPerQuantum] = useState(1);
   const [pixelsPerQuantum, setPixelsPerQuantum] = useState(1);
   const previousFitWidth = useRef<number | null>(null);
@@ -222,16 +223,19 @@ export function App() {
                       pixelsPerQuantum,
                       fitPixelsPerQuantum,
                     )}
-                    disabled={fitPixelsPerQuantum >= MAX_PIXELS_PER_QUANTUM}
                     aria-label="Timeline zoom"
-                    onChange={(event) =>
-                      setPixelsPerQuantum(
-                        sliderValueToZoom(
-                          Number(event.target.value),
-                          fitPixelsPerQuantum,
-                        ),
-                      )
-                    }
+                    onChange={(event) => {
+                      if (fitPixelsPerQuantum >= MAX_PIXELS_PER_QUANTUM) {
+                        setZoomLimitReached(true);
+                      } else {
+                        setPixelsPerQuantum(
+                          sliderValueToZoom(
+                            Number(event.target.value),
+                            fitPixelsPerQuantum,
+                          ),
+                        );
+                      }
+                    }}
                   />
                   <output>
                     {Math.abs(pixelsPerQuantum - fitPixelsPerQuantum) < 0.001
@@ -253,6 +257,7 @@ export function App() {
               maxPixelsPerQuantum={MAX_PIXELS_PER_QUANTUM}
               onPixelsPerQuantumChange={setPixelsPerQuantum}
               onFitPixelsPerQuantumChange={handleFitWidthChange}
+              onZoomLimitReached={() => setZoomLimitReached(true)}
               selectedProcess={selectedProcess}
               onSelectProcess={setSelectedProcess}
             />
@@ -269,6 +274,26 @@ export function App() {
             onSelectProcess={setSelectedProcess}
           />
         </main>
+      )}
+      {zoomLimitReached && (
+        <div className="dialog-backdrop">
+          <section
+            className="zoom-limit-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="zoom-limit-title"
+            aria-describedby="zoom-limit-description"
+          >
+            <h2 id="zoom-limit-title">Maximum zoom reached</h2>
+            <p id="zoom-limit-description">
+              This dataset is already at the maximum bar width, so it cannot be
+              zoomed in any further.
+            </p>
+            <button type="button" onClick={() => setZoomLimitReached(false)}>
+              OK
+            </button>
+          </section>
+        </div>
       )}
     </div>
   );

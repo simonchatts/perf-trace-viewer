@@ -16,10 +16,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# Convert Linux `perf sched` data to detailed or quantized visualization data.
+# Convert Linux `perf sched` data to detailed or aggregated visualization data.
 #
 # Run as in: perf_trace_viewer <input-file> <output-file>
-# Or: perf_trace_viewer --quantized --quantum 0.2 <input-file> <output-file>
+# Or: perf_trace_viewer --aggregate --agg-time 0.2 <input-file> <output-file>
 
 import sys
 
@@ -62,7 +62,7 @@ def main() -> None:
 def get_opts() -> Namespace:
     parser = ArgumentParser(
         description=(
-            "Convert collected `perf sched` data for detailed or quantized viewing"
+            "Convert collected `perf sched` data for detailed or aggregated viewing"
         )
     )
     parser.add_argument("input_filename", help="perf data input")
@@ -74,23 +74,26 @@ def get_opts() -> Namespace:
     )
     parser.add_argument(
         "-q",
-        "--quantized",
+        "--aggregate",
+        dest="quantized",
         action="store_true",
-        help="Generate sparse quantized CPU data for the web viewer",
+        help="Generate sparse aggregated CPU data for the web viewer",
     )
     parser.add_argument(
-        "--quantum",
+        "--agg-time",
+        dest="quantum",
+        type=float,
+        default=0.2,
+        metavar="SECONDS",
+        help="Duration of each aggregation interval in seconds (default: 0.2)",
+    )
+    parser.add_argument(
+        "--agg-min-percent",
+        dest="squelch",
         type=float,
         default=1.0,
-        metavar="SECONDS",
-        help="Duration of each quantized sample (default: 1.0)",
-    )
-    parser.add_argument(
-        "--squelch",
-        type=float,
-        default=5.0,
         metavar="PERCENT",
-        help="Fold smaller per-process contributions into other (default: 5.0)",
+        help="Fold smaller per-process contributions into other (default: 1.0)",
     )
     parser.add_argument(
         "-s",
@@ -115,13 +118,13 @@ def get_opts() -> Namespace:
     )
     opts = parser.parse_args()
     if not math.isfinite(opts.quantum) or opts.quantum < 0.000000001:
-        parser.error("--quantum must be at least one nanosecond")
+        parser.error("--agg-time must be at least one nanosecond")
     if not math.isfinite(opts.squelch) or opts.squelch < 0 or opts.squelch > 100:
-        parser.error("--squelch must be between 0 and 100")
-    if not opts.quantized and (opts.quantum != 1.0 or opts.squelch != 5.0):
-        parser.error("--quantum and --squelch require --quantized")
+        parser.error("--agg-min-percent must be between 0 and 100")
+    if not opts.quantized and (opts.quantum != 0.2 or opts.squelch != 1.0):
+        parser.error("--agg-time and --agg-min-percent require --aggregate")
     if opts.jsonl and opts.quantized:
-        parser.error("--quantized does not support --jsonl input")
+        parser.error("--aggregate does not support --jsonl input")
     return opts
 
 
@@ -163,7 +166,7 @@ def process_file(opts: Namespace) -> Output:
                     # Send the stream to the engine, along with everything else it needs
                     if opts.quantized:
                         if opts.wait != 3.0:
-                            logging.warning("--wait is ignored with --quantized")
+                            logging.warning("--wait is ignored with --aggregate")
                         result = process_quantized_perf_data(
                             lines,
                             mdata,

@@ -42,6 +42,7 @@ interface ChartProps {
   maxPixelsPerQuantum: number;
   onPixelsPerQuantumChange: (width: number) => void;
   onFitPixelsPerQuantumChange: (width: number) => void;
+  onZoomLimitReached: () => void;
   selectedProcess: number | null;
   onSelectProcess: (index: number | null) => void;
 }
@@ -119,6 +120,7 @@ export function CpuChart({
   maxPixelsPerQuantum,
   onPixelsPerQuantumChange,
   onFitPixelsPerQuantumChange,
+  onZoomLimitReached,
   selectedProcess,
   onSelectProcess,
 }: ChartProps) {
@@ -194,6 +196,10 @@ export function CpuChart({
   function zoomTo(width: number, viewportX?: number) {
     const element = scrollRef.current;
     if (!element) return;
+    if (minPixelsPerQuantum >= maxPixelsPerQuantum) {
+      onZoomLimitReached();
+      return;
+    }
     const anchorX =
       viewportX ?? LABEL_WIDTH + (element.clientWidth - LABEL_WIDTH) / 2;
     zoomAnchor.current = {

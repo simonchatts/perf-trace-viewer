@@ -8,8 +8,8 @@ This tool lets you visualize how a Linux system is scheduling threads over time:
 
 It uses one collection script (wrapping `perf sched record`) on the target
 system, to record the data (eg for 10 seconds), and then a second script to
-convert this into either detailed Trace Event format or a compact, time-quantized
-format for the bundled web viewer. The quantized format is intended for much
+convert this into either detailed Trace Event format or a compact, aggregated
+format for the bundled web viewer. The aggregation format is intended for much
 longer recordings where individual scheduling events are too detailed to be
 useful.
 
@@ -39,33 +39,34 @@ The tool has a three step workflow:
  - Visualize the data. eg in Chrome, open `chrome://tracing` and load the output
    file you just converted.
 
-## Quantized viewer for long traces
+## Aggregated viewer for long traces
 
-Use `--quantized` to aggregate scheduling into one-second samples, with small
+Use `--aggregate` to aggregate scheduling into 200 ms intervals, with small
 per-process contributions folded into an `other` segment:
 
-    ./perf_trace_viewer --quantized input.tar.xz trace.quantized.json
+    ./perf_trace_viewer --aggregate input.tar.xz trace.aggregated.json
 
-The sample duration and squelch threshold are configurable. For example, this
-uses 200 ms samples and keeps per-process contributions of at least 2.5%:
+The default aggregation interval is 200 ms and the minimum contribution
+threshold is 1%. Both are configurable. For example, this keeps contributions of at least
+2.5%:
 
-    ./perf_trace_viewer --quantized --quantum 0.2 --squelch 2.5 \
-      input.tar.xz trace.quantized.json
+    ./perf_trace_viewer --aggregate --agg-time 0.2 --agg-min-percent 2.5 \
+      input.tar.xz trace.aggregated.json
 
 Collected archives may be plain or compressed tar files. The perf script member
 may also be gzip-compressed as `perf.data.txt.gz`; both forms are read
 transparently.
 
-Quantized mode streams the source and skips wakeup, waiting-track,
+Aggregation mode streams the source and skips wakeup, waiting-track,
 runtime-accounting, and detailed Trace Event construction work that the browser
 does not need. It retains only lightweight fork/exit identity bookkeeping and
 reads runtime records only for namespace-aware PID mapping. Its output is a
 sparse JSON object using the versioned
 `perf-trace-viewer.quantized/v1` schema. Each CPU contains only non-empty
-quanta, whose stack entries reference the top-level process array by index;
+aggregation intervals, whose stack entries reference the top-level process array by index;
 index `-1` is the `other` bucket. The process metadata includes all known
 threads and their CPU-time totals. See the
-[quantized format documentation](docs/quantized-format.md) for the complete
+[aggregation format documentation](docs/quantized-format.md) for the complete
 contract.
 
 To run the viewer during development:
@@ -89,7 +90,7 @@ Load a local JSON file with the file picker. A static deployment can keep the
 application and datasets together; build with `npm run build`, copy a dataset
 into `dist`, then link to it with a relative query parameter:
 
-    https://example.net/perf/?data=trace.quantized.json
+    https://example.net/perf/?data=trace.aggregated.json
 
 The production application shell is an installable offline-capable PWA. Trace
 datasets are deliberately not added to its cache because they may be very
