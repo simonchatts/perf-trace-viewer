@@ -32,6 +32,7 @@ const OTHER_COLOR = "#66798c";
 const MIN_BAR_BORDER_WIDTH = 6;
 
 interface ChartProps {
+  colorHashSeed: number;
   cpus: TraceCpu[];
   processes: TraceProcess[];
   eventGroups: TraceEventGroup[];
@@ -110,6 +111,7 @@ function indexSamples(
 }
 
 export function CpuChart({
+  colorHashSeed,
   cpus,
   processes,
   eventGroups,
@@ -140,9 +142,12 @@ export function CpuChart({
       eventGroups.map((group) => group.category ?? "sdt_processmgr"),
     );
     return new Map(
-      [...categories].map((category) => [category, sdtColor(category)]),
+      [...categories].map((category) => [
+        category,
+        sdtColor(category, colorHashSeed),
+      ]),
     );
-  }, [eventGroups]);
+  }, [colorHashSeed, eventGroups]);
   const height = AXIS_HEIGHT + cpus.length * ROW_HEIGHT;
   const timelineWidth = Math.max(
     viewportWidth,
@@ -360,7 +365,7 @@ export function CpuChart({
               color:
                 processIndex === -1
                   ? OTHER_COLOR
-                  : processColor(processes[processIndex].name),
+                  : processColor(processes[processIndex].name, colorHashSeed),
               alpha:
                 selectedProcess === null || selected
                   ? 0.92
@@ -417,7 +422,8 @@ export function CpuChart({
       if (group.quantum < firstQuantum || group.quantum > lastQuantum) continue;
       const x = LABEL_WIDTH + group.quantum * pixelsPerQuantum - scrollLeft;
       const category = group.category ?? "sdt_processmgr";
-      const color = sdtColorByCategory.get(category) ?? sdtColor(category);
+      const color =
+        sdtColorByCategory.get(category) ?? sdtColor(category, colorHashSeed);
       context.strokeStyle = color;
       context.globalAlpha = 0.82;
       context.lineWidth = 1;
@@ -437,6 +443,7 @@ export function CpuChart({
     context.stroke();
   }, [
     cpus,
+    colorHashSeed,
     eventGroups,
     height,
     pixelsPerQuantum,
@@ -562,7 +569,11 @@ export function CpuChart({
                   "--event-color":
                     sdtColorByCategory.get(
                       hover.group.category ?? "sdt_processmgr",
-                    ) ?? sdtColor(hover.group.category ?? "sdt_processmgr"),
+                    ) ??
+                    sdtColor(
+                      hover.group.category ?? "sdt_processmgr",
+                      colorHashSeed,
+                    ),
                 } as CSSProperties
               }
             >
@@ -598,7 +609,10 @@ export function CpuChart({
                         background:
                           index === -1
                             ? OTHER_COLOR
-                            : processColor(processes[index].name),
+                            : processColor(
+                                processes[index].name,
+                                colorHashSeed,
+                              ),
                       }}
                     />
                     {index === -1 ? "Other" : processes[index].name}

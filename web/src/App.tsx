@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import { CpuChart } from "./CpuChart";
-import { formatDuration, validateTrace } from "./format";
+import { COLOR_HASH_SEED, formatDuration, validateTrace } from "./format";
 import { ProcessTable } from "./ProcessTable";
 import type { QuantizedTrace } from "./types";
 
@@ -52,7 +52,20 @@ export function App() {
   const [zoomLimitReached, setZoomLimitReached] = useState(false);
   const [fitPixelsPerQuantum, setFitPixelsPerQuantum] = useState(1);
   const [pixelsPerQuantum, setPixelsPerQuantum] = useState(1);
+  const [colorHashSeed, setColorHashSeed] = useState(COLOR_HASH_SEED);
+  const [showColorHashSeed, setShowColorHashSeed] = useState(false);
   const previousFitWidth = useRef<number | null>(null);
+  const seedLabelTimeout = useRef<number | null>(null);
+
+  // Clear the seed label timer if the app unmounts during its display period.
+  useEffect(
+    () => () => {
+      if (seedLabelTimeout.current !== null) {
+        window.clearTimeout(seedLabelTimeout.current);
+      }
+    },
+    [],
+  );
 
   // Follow viewport changes while fitted, but preserve deliberate user zooms.
   const handleFitWidthChange = useCallback((nextFitWidth: number) => {
@@ -109,6 +122,19 @@ export function App() {
     if (file) void loadFile(file);
   }
 
+  // Move through unsigned 32-bit seeds and briefly reveal the new value.
+  function changeColorHashSeed(delta: -1 | 1) {
+    setColorHashSeed((current) => (current + delta) >>> 0);
+    setShowColorHashSeed(true);
+    if (seedLabelTimeout.current !== null) {
+      window.clearTimeout(seedLabelTimeout.current);
+    }
+    seedLabelTimeout.current = window.setTimeout(() => {
+      setShowColorHashSeed(false);
+      seedLabelTimeout.current = null;
+    }, 3000);
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -119,13 +145,39 @@ export function App() {
             <strong>Quantized CPU atlas</strong>
           </div>
         </div>
-        <button
-          className="load-button"
-          type="button"
-          onClick={() => fileInput.current?.click()}
-        >
-          Load dataset
-        </button>
+        <div className="header-actions">
+          <output
+            className={`seed-value${showColorHashSeed ? " visible" : ""}`}
+            aria-live="polite"
+          >
+            Colour seed {colorHashSeed}
+          </output>
+          <div className="seed-buttons" aria-label="Colour seed">
+            <button
+              type="button"
+              aria-label="Decrease colour seed"
+              title="Decrease colour seed"
+              onClick={() => changeColorHashSeed(-1)}
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              aria-label="Increase colour seed"
+              title="Increase colour seed"
+              onClick={() => changeColorHashSeed(1)}
+            >
+              ›
+            </button>
+          </div>
+          <button
+            className="load-button"
+            type="button"
+            onClick={() => fileInput.current?.click()}
+          >
+            Load dataset
+          </button>
+        </div>
         <input
           ref={fileInput}
           type="file"
@@ -247,6 +299,7 @@ export function App() {
               </div>
             </div>
             <CpuChart
+              colorHashSeed={colorHashSeed}
               cpus={trace.cpus}
               processes={trace.processes}
               eventGroups={trace.events}
@@ -268,6 +321,7 @@ export function App() {
           </section>
 
           <ProcessTable
+            colorHashSeed={colorHashSeed}
             processes={trace.processes}
             quantumMs={trace.trace.quantumMs}
             selectedProcess={selectedProcess}

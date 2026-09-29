@@ -8,6 +8,7 @@ import type { TraceProcess } from "./types";
 type SortKey = "cpuMs" | "firstQuantum" | "lastQuantum";
 
 interface ProcessTableProps {
+  colorHashSeed: number;
   processes: TraceProcess[];
   quantumMs: number;
   selectedProcess: number | null;
@@ -15,6 +16,7 @@ interface ProcessTableProps {
 }
 
 export function ProcessTable({
+  colorHashSeed,
   processes,
   quantumMs,
   selectedProcess,
@@ -77,7 +79,9 @@ export function ProcessTable({
       {selected && (
         <div className="process-detail">
           <div className="detail-title">
-            <i style={{ background: processColor(selected.name) }} />
+            <i
+              style={{ background: processColor(selected.name, colorHashSeed) }}
+            />
             <div>
               <strong>{selected.name}</strong>
               <span>
@@ -172,7 +176,9 @@ export function ProcessTable({
                 <td>
                   <i
                     className="process-swatch"
-                    style={{ background: processColor(process.name) }}
+                    style={{
+                      background: processColor(process.name, colorHashSeed),
+                    }}
                   />
                   <strong>{process.name}</strong>
                 </td>

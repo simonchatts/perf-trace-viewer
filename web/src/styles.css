@@ -79,6 +79,45 @@ button {
   font-size: 16px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.seed-value {
+  min-width: 148px;
+  color: #a9c0cf;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  opacity: 0;
+  transition: opacity 350ms ease;
+}
+.seed-value.visible {
+  opacity: 1;
+}
+
+.seed-buttons {
+  display: flex;
+}
+.seed-buttons button {
+  width: 34px;
+  height: 38px;
+  padding: 0;
+  border-radius: 0;
+  font-size: 24px;
+  line-height: 1;
+}
+.seed-buttons button:first-child {
+  border-radius: 8px 0 0 8px;
+}
+.seed-buttons button:last-child {
+  margin-left: -1px;
+  border-radius: 0 8px 8px 0;
+}
+
 button,
 .load-button {
   border: 1px solid rgba(2, 200, 255, 0.5);
@@ -607,6 +646,15 @@ th:not(:first-child) {
   }
   .brand span {
     display: none;
+  }
+  .seed-value {
+    position: absolute;
+    top: 72px;
+    right: 20px;
+    min-width: 0;
+    padding: 6px 9px;
+    border-radius: 6px;
+    background: rgba(7, 24, 45, 0.92);
   }
   .trace-heading,
   .section-heading {

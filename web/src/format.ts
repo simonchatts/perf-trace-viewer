@@ -16,11 +16,11 @@ const PROCESS_COLORS = [
 ];
 
 // Tune this seed if a dataset's common names produce an inconvenient colour mix.
-const COLOR_HASH_SEED = 0x00000004;
+export const COLOR_HASH_SEED = 46;
 
 /* Hash a name into a stable index for the shared trace colour palette. */
-function colorIndex(name: string): number {
-  let hash = COLOR_HASH_SEED;
+function colorIndex(name: string, seed: number): number {
+  let hash = seed;
   for (const character of name) {
     hash ^= character.charCodeAt(0);
     hash = Math.imul(hash, 16777619);
@@ -29,13 +29,19 @@ function colorIndex(name: string): number {
 }
 
 // Return a stable vivid colour based on the displayed process name.
-export function processColor(name: string): string {
-  return PROCESS_COLORS[colorIndex(name)];
+export function processColor(
+  name: string,
+  seed: number = COLOR_HASH_SEED,
+): string {
+  return PROCESS_COLORS[colorIndex(name, seed)];
 }
 
 // Return a stable vivid colour based on the SDT category name.
-export function sdtColor(category: string): string {
-  return PROCESS_COLORS[colorIndex(category)];
+export function sdtColor(
+  category: string,
+  seed: number = COLOR_HASH_SEED,
+): string {
+  return PROCESS_COLORS[colorIndex(category, seed)];
 }
 
 // Render milliseconds at a useful human scale.
