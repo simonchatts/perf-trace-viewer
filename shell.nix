@@ -27,5 +27,6 @@ mkShell {
     shellcheck
     xz
     nodejs
+    just
   ];
 }
