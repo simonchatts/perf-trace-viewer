@@ -20,6 +20,7 @@
 #
 # Run as in: perf_trace_viewer <input-file> <output-file>
 # Or: perf_trace_viewer --aggregate --agg-time 0.2 <input-file> <output-file>
+# Add a display title to aggregated JSON with --aggregate --title "Test run".
 
 import sys
 
@@ -96,6 +97,10 @@ def get_opts() -> Namespace:
         help="Fold smaller per-process contributions into other (default: 1.0)",
     )
     parser.add_argument(
+        "--title",
+        help="Display title to include in aggregated JSON for the web viewer",
+    )
+    parser.add_argument(
         "-s",
         "--skip",
         type=float,
@@ -123,6 +128,8 @@ def get_opts() -> Namespace:
         parser.error("--agg-min-percent must be between 0 and 100")
     if not opts.quantized and (opts.quantum != 0.2 or opts.squelch != 1.0):
         parser.error("--agg-time and --agg-min-percent require --aggregate")
+    if opts.title is not None and not opts.quantized:
+        parser.error("--title requires --aggregate")
     if opts.jsonl and opts.quantized:
         parser.error("--aggregate does not support --jsonl input")
     return opts
@@ -156,6 +163,8 @@ def process_file(opts: Namespace) -> Output:
             for member in tar.getmembers():
                 if member.name == "perf-mdata.txt":
                     mdata, proc_info = parse_mdata(extract(tar, member))
+                    if opts.title is not None and mdata is not None:
+                        mdata["title"] = opts.title
                 elif member.name in ("perf.data.txt", "perf.data.txt.gz"):
                     if mdata is None or proc_info is None:
                         die(

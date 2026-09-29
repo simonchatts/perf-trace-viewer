@@ -231,8 +231,17 @@ export function App() {
           <section className="trace-heading">
             <div>
               <p className="eyebrow">{datasetName}</p>
-              <h1>{trace.source.system || "Scheduling trace"}</h1>
-              <p>{trace.source.date || "Quantized scheduling data"}</p>
+              <h1>
+                {trace.source.title ||
+                  trace.source.system ||
+                  "Scheduling trace"}
+              </h1>
+              <div className="trace-meta">
+                <p>{trace.source.date || "Quantized scheduling data"}</p>
+                {trace.source.title && trace.source.system && (
+                  <p>{trace.source.system}</p>
+                )}
+              </div>
             </div>
             <div className="trace-stats">
               <div>

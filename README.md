@@ -46,6 +46,12 @@ per-process contributions folded into an `other` segment:
 
     ./perf_trace_viewer --aggregate input.tar.xz trace.aggregated.json
 
+Set an optional main heading for the web viewer with `--title`; the system
+description remains visible as secondary metadata:
+
+    ./perf_trace_viewer --aggregate --title "Load test: build 42" \
+      input.tar.xz trace.aggregated.json
+
 The default aggregation interval is 200 ms and the minimum contribution
 threshold is 1%. Both are configurable. For example, this keeps contributions of at least
 2.5%:
