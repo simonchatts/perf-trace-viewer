@@ -51,7 +51,12 @@ def main() -> None:
         directory = serving_directory(stack)
         handler = partial(SimpleHTTPRequestHandler, directory=str(directory))
         server = ThreadingHTTPServer((args.host, args.port), handler)
-        print(f"Serving {directory} at http://{args.host}:{args.port}/")
+        print(f"(Using temp directory {directory})")
+        print(
+            "\nWelcome to the perf_trace_viewer UI! "
+            "This is for files processed with perf_trace_viewer --aggregated only.\n"
+        )
+        print(f"Serving UI at http://{args.host}:{args.port}/")
         try:
             server.serve_forever()
         except KeyboardInterrupt:
