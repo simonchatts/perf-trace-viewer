@@ -70,26 +70,25 @@ jobs:
 
       - name: Prepare standalone scripts
         run: |
-          mkdir zipped
+          mkdir release-assets
+          cp collect perf-trace-viewer-web.tar.gz release-assets/
           # We've done all the tests, so can delete any
           # test-only modules before zipping up.
           rm -f perf_trace_viewer/*test*.py
           python3 -m zipapp perf_trace_viewer \
-            --output=zipped/perf_trace_viewer \
+            --output=release-assets/perf_trace_viewer \
             --python="/usr/bin/env python3"
 
       - name: Test standalone script
-        run: zipped/perf_trace_viewer --help
+        run: ./release-assets/perf_trace_viewer --help
 
       - name: Upload candidate release assets
         uses: actions/upload-artifact@v6
         with:
           name: release-assets
           if-no-files-found: error
-          path: |
-            collect
-            zipped/perf_trace_viewer
-            perf-trace-viewer-web.tar.gz
+          # Upload the staged files without including the staging directory.
+          path: release-assets/*
 
   verify_release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -121,14 +120,14 @@ jobs:
           name: release-assets
 
       - name: Restore executable permissions
-        run: chmod +x collect zipped/perf_trace_viewer
+        run: chmod +x collect perf_trace_viewer
 
       - name: Add assets to tagged release
         uses: softprops/action-gh-release@v3
         with:
           files: |
             collect
-            zipped/perf_trace_viewer
+            perf_trace_viewer
             perf-trace-viewer-web.tar.gz
 
 permissions:
