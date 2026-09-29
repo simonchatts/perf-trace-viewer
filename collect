@@ -159,6 +159,12 @@ run_sdt_perf()
     perf --buildid-dir "$sdt_cache_dir" "$@"
 }
 
+# Report SDT setup problems without preventing the scheduler trace collection.
+warn_sdt()
+{
+    echo "WARNING: SDT marker processing: $*" >&2
+}
+
 # Return success when an SDT event is already registered in tracefs.
 sdt_probe_exists()
 {
@@ -172,10 +178,13 @@ register_sdt_probe()
 {
     local event="$1"
     local probe_error
+    local probe_rc
 
     if probe_error=$(run_sdt_perf probe --add="%$event" 2>&1); then
         sdt_probes_added+=("$event")
         return
+    else
+        probe_rc=$?
     fi
 
     # Another registrar may have won the race even though this perf invocation
@@ -185,7 +194,8 @@ register_sdt_probe()
         return
     fi
 
-    die "Could not register SDT event '$event': ${probe_error:-perf probe returned no diagnostic output.}"
+    warn_sdt "could not register event '$event' (exit code $probe_rc): ${probe_error:-perf returned no diagnostic output.} Skipping it."
+    return 1
 }
 
 # Add an event selector unless its provider is already being recorded.
@@ -210,6 +220,7 @@ setup_sdt_probes()
     local cache_listing
     local event
     local object
+    local cache_rc
     local -a cached_sdt_events
 
     if [ "${#sdt_objects[@]}" -eq 0 ]; then
@@ -218,44 +229,63 @@ setup_sdt_probes()
 
     if [ -n "$buildid_dir" ]; then
         if ! mkdir -p "$buildid_dir"; then
-            die "Could not create perf build-ID directory '$buildid_dir'."
+            warn_sdt "could not create perf build-ID directory '$buildid_dir'; continuing without SDT markers."
+            return
         fi
         sdt_cache_dir=$(mktemp -d "$buildid_dir/xr-collect.XXXXXX") ||
-            die "Could not create a temporary perf cache under '$buildid_dir'."
+            {
+                warn_sdt "could not create a temporary perf cache under '$buildid_dir'; continuing without SDT markers."
+                return
+            }
     else
         sdt_cache_dir=$(mktemp -d "${TMPDIR:-/tmp}/xr-collect.XXXXXX") ||
-            die "Could not create a temporary perf cache."
+            {
+                warn_sdt "could not create a temporary perf cache; continuing without SDT markers."
+                return
+            }
     fi
 
     for object in "${sdt_objects[@]}"; do
         if [ ! -r "$object" ]; then
-            die "SDT object '$object' is not available."
+            warn_sdt "could not process object '$object': file is not readable; skipping it."
+            continue
         fi
-        if ! cache_error=$(run_sdt_perf buildid-cache --add "$object" 2>&1); then
-            die "Could not cache SDT markers from '$object': $cache_error"
+        if cache_error=$(run_sdt_perf buildid-cache --add "$object" 2>&1); then
+            :
+        else
+            cache_rc=$?
+            warn_sdt "could not cache markers from object '$object' (exit code $cache_rc): ${cache_error:-perf returned no diagnostic output.} Skipping it."
         fi
     done
 
-    if ! cache_listing=$(run_sdt_perf probe --cache --list 2>&1); then
-        die "Could not list cached SDT events: $cache_listing"
+    if cache_listing=$(run_sdt_perf probe --cache --list 2>&1); then
+        :
+    else
+        cache_rc=$?
+        warn_sdt "could not list cached events (exit code $cache_rc): ${cache_listing:-perf returned no diagnostic output.} Continuing without SDT markers."
+        return
     fi
     mapfile -t cached_sdt_events < <(
         printf '%s\n' "$cache_listing" |
             sed -n 's/^\(sdt_[^:=[:space:]]*:[^=[:space:]]*\)=.*/\1/p'
     )
     if [ "${#cached_sdt_events[@]}" -eq 0 ]; then
-        die "No SDT events were found in the supplied objects."
+        warn_sdt "no events were found in the supplied objects; continuing without SDT markers."
+        return
     fi
 
     for event in "${cached_sdt_events[@]}"; do
         if ! printf '%s\n' "$event" |
             grep -Eq '^sdt_[[:alnum:]_]+:[[:alnum:]_]+$'; then
-            die "Perf returned an unsupported SDT event name '$event'."
+            warn_sdt "perf returned unsupported event name '$event'; skipping it."
+            continue
+        fi
+        if ! sdt_probe_exists "$event"; then
+            if ! register_sdt_probe "$event"; then
+                continue
+            fi
         fi
         add_sdt_event_selector "${event%%:*}:*"
-        if ! sdt_probe_exists "$event"; then
-            register_sdt_probe "$event"
-        fi
     done
 }
 
