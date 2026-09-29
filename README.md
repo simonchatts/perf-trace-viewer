@@ -74,17 +74,15 @@ To run the viewer during development:
     npm install
     npm run dev
 
-For a portable local server, download and extract
-`perf-trace-viewer-web.tar.gz` from the release. It includes the compiled UI and
-an executable Python 3 server script (no extra Python packages required):
+For a portable local server, download `perf_trace_ui` from the release and make
+it executable (`chmod +x perf_trace_ui`). It contains the compiled UI and its
+Python 3 server (no extra Python packages required):
 
-    tar -xzf perf-trace-viewer-web.tar.gz
-    ./serve_ui.py
+    ./perf_trace_ui
 
 Then open <http://127.0.0.1:8000/>. You can choose another listening address
-and port with `./serve_ui.py --host 0.0.0.0 --port 9000`. The server script can
-also be run with `python3 serve_ui.py` if executable permissions were not
-preserved while extracting the archive.
+and port with `./perf_trace_ui --host 0.0.0.0 --port 9000`. It can also be run
+with `python3 perf_trace_ui` if executable permissions were not preserved.
 
 Load a local JSON file with the file picker. A static deployment can keep the
 application and datasets together; build with `npm run build`, copy a dataset

@@ -65,13 +65,17 @@ jobs:
           test -x dist/serve_ui.py
           python3 dist/serve_ui.py --help
 
-      - name: Package the static web viewer
-        run: tar -C dist -czf perf-trace-viewer-web.tar.gz .
-
       - name: Prepare standalone scripts
         run: |
           mkdir release-assets
-          cp collect perf-trace-viewer-web.tar.gz release-assets/
+          cp collect release-assets/
+          mkdir release-assets/ui-package
+          cp -R dist/. release-assets/ui-package/
+          mv release-assets/ui-package/serve_ui.py release-assets/ui-package/__main__.py
+          python3 -m zipapp release-assets/ui-package \
+            --output=release-assets/perf_trace_ui \
+            --python="/usr/bin/env python3"
+          rm -rf release-assets/ui-package
           # We've done all the tests, so can delete any
           # test-only modules before zipping up.
           rm -f perf_trace_viewer/*test*.py
@@ -80,7 +84,9 @@ jobs:
             --python="/usr/bin/env python3"
 
       - name: Test standalone script
-        run: ./release-assets/perf_trace_viewer --help
+        run: |
+          ./release-assets/perf_trace_viewer --help
+          ./release-assets/perf_trace_ui --help
 
       - name: Upload candidate release assets
         uses: actions/upload-artifact@v6
@@ -120,7 +126,7 @@ jobs:
           name: release-assets
 
       - name: Restore executable permissions
-        run: chmod +x collect perf_trace_viewer
+        run: chmod +x collect perf_trace_viewer perf_trace_ui
 
       - name: Add assets to tagged release
         uses: softprops/action-gh-release@v3
@@ -128,7 +134,7 @@ jobs:
           files: |
             collect
             perf_trace_viewer
-            perf-trace-viewer-web.tar.gz
+            perf_trace_ui
 
 permissions:
   contents: read
