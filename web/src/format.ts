@@ -57,7 +57,7 @@ export function formatDuration(milliseconds: number): string {
 /* Format a trace offset with clock-like fields and precision when available. */
 export function formatTimestamp(milliseconds: number): string {
   if (milliseconds < 1) return `${(milliseconds * 1000).toFixed(1)} µs`;
-  if (milliseconds < 1000) return `${milliseconds.toFixed(1)} ms`;
+  if (milliseconds < 1000) return `${Number(milliseconds.toFixed(1))} ms`;
 
   const totalCentiseconds = Math.max(0, Math.round(milliseconds / 10));
   const totalSeconds = Math.floor(totalCentiseconds / 100);
@@ -88,6 +88,17 @@ export function formatTimestamp(milliseconds: number): string {
     : `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
         .toString()
         .padStart(2, "0")} h`;
+}
+
+/* Format an axis tick using its interval to choose a readable zero unit. */
+export function formatTimelineTick(
+  milliseconds: number,
+  tickIntervalMilliseconds: number,
+): string {
+  if (milliseconds === 0) {
+    return tickIntervalMilliseconds < 1000 ? "0 ms" : "0 s";
+  }
+  return formatTimestamp(milliseconds);
 }
 
 // Format a quantum index as an offset from the viewed trace start.

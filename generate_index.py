@@ -48,6 +48,12 @@ def trace_card(dataset: Path, plugin: Path | None, ui: Path, output: Path) -> st
     )
 
 
+# Prefer filesystem creation time, falling back to modification time where absent.
+def creation_time(path: Path) -> float:
+    details = path.stat()
+    return getattr(details, "st_birthtime", details.st_mtime)
+
+
 # Scan the current directory and write an index referencing the shared viewer.
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -59,7 +65,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    datasets = sorted(Path.cwd().glob("*.json"))
+    datasets = sorted(
+        Path.cwd().glob("*.json"),
+        key=lambda path: (-creation_time(path), path.name),
+    )
     plugins = sorted(Path.cwd().glob("*.js"))
     if not datasets:
         parser.error("the current directory contains no .json files")

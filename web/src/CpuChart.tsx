@@ -13,6 +13,7 @@ import {
 import {
   formatDuration,
   formatTimestamp,
+  formatTimelineTick,
   processColor,
   sdtColor,
 } from "./format";
@@ -307,7 +308,11 @@ export function CpuChart({
       context.lineTo(x + 0.5, height);
       context.stroke();
       context.fillStyle = "#8faabe";
-      context.fillText(formatTimestamp(quantum * quantumMs), x + 5, 15);
+      context.fillText(
+        formatTimelineTick(quantum * quantumMs, step * quantumMs),
+        x + 5,
+        15,
+      );
     }
 
     const showVerticalBarBorders = pixelsPerQuantum >= MIN_BAR_BORDER_WIDTH;

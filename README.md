@@ -109,8 +109,10 @@ the browser; reloading a URL with `sdt=` loads the page version again.
 To make a compact index for a directory of JSON files, place the built UI in
 `dist/` beneath that directory and run `generate_index.py` from there. The
 script creates `index.html` with a link for each JSON file, using its title,
-date, and filename. If the directory has one `.js` file, each link also
-passes it as `sdt=`. Use `--ui` and `--output` to choose other paths:
+date, and filename, ordered newest first by file creation time (or modification
+time where creation time is unavailable). If the directory has one `.js` file,
+each link also passes it as `sdt=`. Use `--ui` and `--output` to choose
+other paths:
 
     /path/to/generate_index.py --ui dist/index.html --output traces.html
 
