@@ -8,7 +8,8 @@
     "dev": "vite",
     "format": "prettier --write web vite.config.ts",
     "format:check": "prettier --check web vite.config.ts",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "test:plugin": "node --test web/tests/sdtPlugin.test.mjs"
   },
   "dependencies": {
     "react": "^19.3.0",

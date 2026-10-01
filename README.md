@@ -96,6 +96,35 @@ into `dist`, then link to it with a relative query parameter:
 
     https://example.net/perf/?data=trace.aggregated.json
 
+Add an optional SDT plugin file with `sdt=`. The file must contain the same
+JavaScript array expression accepted by the plugin editor. For example:
+
+    https://example.net/perf/?data=trace.aggregated.json&sdt=rules.js
+
+The URL plugin becomes active when loaded. In the editor, **Insert page
+version** restores it, while **Insert local version** restores any plugin saved
+in this browser. **Save locally** activates the edited plugin and stores it in
+the browser; reloading a URL with `sdt=` loads the page version again.
+
+To make a compact index for a directory of JSON files, place the built UI in
+`dist/` beneath that directory and run `generate_index.py` from there. The
+script creates `index.html` with a link for each JSON file, using its title,
+date, and filename. If the directory has one `.js` file, each link also
+passes it as `sdt=`. Use `--ui` and `--output` to choose other paths:
+
+    /path/to/generate_index.py --ui dist/index.html --output traces.html
+
+The **SDT plugin** button opens an editor for a JavaScript array of rules.
+Each rule has `category` and `name` glob strings (`*` and `?`) and a
+`transform(event, context)` callback. Rules are tried in order; return `null`
+to leave an event unchanged and try the next rule, or return
+`{ category: "new_category", label: "Display text" }` to change its tooltip
+and marker colour category. `context.lookupPid(pid)` returns an array of all
+known `{ id, pid, name }` matches, including reused PIDs. The code is stored
+in the browser for the current origin, including across development-server
+restarts on the same port. The editor checks syntax as you type and runs the
+plugin against the loaded dataset before saving.
+
 The production application shell is an installable offline-capable PWA. Trace
 datasets are deliberately not added to its cache because they may be very
 large and change independently of the viewer. For a static deployment, serve

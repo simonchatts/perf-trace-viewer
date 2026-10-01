@@ -35,6 +35,19 @@ visualizations. Its schema identifier is
       ]
     }
   ],
+  "pidTable": [
+    {
+      "id": "pid:123:0",
+      "kind": "process",
+      "pid": 123,
+      "name": "example",
+      "cpuMs": 1840.25,
+      "firstQuantum": 2,
+      "lastQuantum": 118,
+      "threads": [],
+      "visibleProcessIndex": 0
+    }
+  ],
   "cpus": [
     { "id": 0, "samples": [[2, [[0, 42.5], [-1, 3.1]]]] }
   ],
@@ -74,6 +87,16 @@ percentage on at least one CPU in at least one quantum. Once included, its
 `cpuMs` and thread totals cover all of its scheduled time, including
 contributions hidden within `other`. `firstQuantum` and `lastQuantum` refer to
 the first and last non-squelched samples visible in the chart.
+
+`pidTable` lists every known process identity, including PIDs found only in
+process metadata and processes whose CPU time is entirely folded into `other`.
+Its entries use the same identity, name, metadata, CPU total, and thread fields
+as `processes`. `visibleProcessIndex` points into `processes` when the process
+has a visible CPU segment, or is `null` otherwise. Its first and last quantum
+describe observed scheduling time; both are `null` for metadata-only PIDs.
+An older dataset may omit `pidTable`; the UI then looks up PIDs only among
+visible processes. Multiple entries can share a PID when that number was
+reused during a trace.
 
 Process and thread `id` values include an internal generation suffix. The
 numeric `pid` and `tid` fields remain the user-visible Linux identifiers, while

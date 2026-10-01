@@ -4,12 +4,13 @@ _list:
 
 # Run Python tests/checks plus web formatting, typechecking, and build validation.
 ci:
-    ruff check --select E,F,I perf_trace_viewer/quantized.py perf_trace_viewer/quantized_test.py perf_trace_viewer/__main__.py perf_trace_viewer/parse_jsonl.py
-    ruff format --check perf_trace_viewer/quantized.py perf_trace_viewer/quantized_test.py perf_trace_viewer/__main__.py perf_trace_viewer/parse_jsonl.py
+    ruff check --select E,F,I generate_index.py perf_trace_viewer/quantized.py perf_trace_viewer/quantized_test.py perf_trace_viewer/__main__.py perf_trace_viewer/parse_jsonl.py
+    ruff format --check generate_index.py perf_trace_viewer/quantized.py perf_trace_viewer/quantized_test.py perf_trace_viewer/__main__.py perf_trace_viewer/parse_jsonl.py
     mypy --strict perf_trace_viewer
     python3 perf_trace_viewer/parse_perf_script.py
     python3 perf_trace_viewer/parse_mdata.py
     python3 perf_trace_viewer/quantized_test.py
+    npm run test:plugin
     npm run format:check
     npm run typecheck
     npm run build

@@ -24,8 +24,20 @@ export interface TraceProcess {
   threads: TraceThread[];
 }
 
+/** Every known PID, including processes absent from visible CPU segments. */
+export interface PidTableEntry extends Omit<
+  TraceProcess,
+  "firstQuantum" | "lastQuantum"
+> {
+  firstQuantum: number | null;
+  lastQuantum: number | null;
+  visibleProcessIndex: number | null;
+}
+
 export interface TraceEvent {
   name: string;
+  /** Optional plugin-produced label shown verbatim in the event tooltip. */
+  label?: string;
   /** Named integer SDT arguments, for example `{ arg1: 11297, arg2: 11320 }`. */
   args?: Record<string, number>;
   /** Legacy v1 field retained for datasets produced before named arguments. */
@@ -62,6 +74,8 @@ export interface QuantizedTrace {
   trace: TraceSummary;
   source: Record<string, string>;
   processes: TraceProcess[];
+  /** Absent in older datasets; the UI then uses the visible process list. */
+  pidTable?: PidTableEntry[];
   cpus: TraceCpu[];
   events: TraceEventGroup[];
 }

@@ -636,6 +636,74 @@ td:first-child {
   height: 18px;
   border-radius: 2px;
 }
+.empty-swatch {
+  background: transparent;
+  border: 1px solid #547185;
+}
+
+.plugin-runtime-error {
+  margin: 12px auto 0;
+  padding: 10px 16px;
+  width: min(1560px, calc(100% - 32px));
+  border: 1px solid rgba(255, 0, 127, 0.55);
+  border-radius: 6px;
+  color: #ffdce9;
+  background: #3a142d;
+  font-size: 13px;
+}
+.plugin-runtime-error button {
+  margin-left: 8px;
+}
+.plugin-dialog {
+  width: min(900px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid #335872;
+  border-radius: 10px;
+  background: #0a2139;
+  box-shadow: 0 20px 70px #000b;
+}
+.plugin-dialog h2 {
+  margin: 0 0 10px;
+}
+.plugin-dialog p {
+  color: #a9c0cf;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.plugin-dialog code {
+  margin-left: 5px;
+  color: #02c8ff;
+}
+.plugin-dialog textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 376px;
+  padding: 14px;
+  resize: vertical;
+  border: 1px solid #335872;
+  border-radius: 6px;
+  color: #e9faff;
+  background: #06182b;
+  font:
+    12px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+.plugin-dialog .plugin-error {
+  color: #ffdce9;
+}
+.plugin-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+.plugin-actions button:first-child {
+  margin-right: auto;
+}
 .numeric {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-variant-numeric: tabular-nums;
@@ -683,5 +751,24 @@ th:not(:first-child) {
   }
   .search-field input {
     width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .app-header {
+    padding: 0 10px;
+  }
+  .brand div {
+    display: none;
+  }
+  .header-actions {
+    gap: 5px;
+  }
+  .header-actions > button {
+    padding: 8px;
+    font-size: 12px;
+  }
+  .plugin-actions {
+    flex-wrap: wrap;
   }
 }

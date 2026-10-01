@@ -342,6 +342,40 @@ class QuantizedEngine:
             )
             for key in process_keys
         ]
+        # Keep a separate complete PID index while preserving visible process
+        # indexes used by the compact CPU samples.
+        all_keys = (
+            set(process_totals)
+            | set(self.process_names)
+            | {key for key, _tid in self.thread_names}
+        )
+        all_keys.update(
+            ("process", pid, self.public_generations.get(pid, 0))
+            for pid in self.proc_info
+        )
+        observed_quanta: Dict[ProcessKey, Tuple[int, int]] = {}
+        for quanta in process_cpus.values():
+            for quantum_index, cell in quanta.items():
+                for key in cell:
+                    first, last = observed_quanta.get(
+                        key, (quantum_index, quantum_index)
+                    )
+                    observed_quanta[key] = (
+                        min(first, quantum_index),
+                        max(last, quantum_index),
+                    )
+        pid_table: List[Dict[str, object]] = []
+        for key in sorted(all_keys, key=lambda item: (item[0], item[1], item[2])):
+            entry = dict(
+                self.encode_process(
+                    key,
+                    process_totals.get(key, 0),
+                    thread_totals.get(key, {}),
+                    observed_quanta.get(key),
+                )
+            )
+            entry["visibleProcessIndex"] = process_indexes.get(key)
+            pid_table.append(entry)
         cpus, other_ns = self.encode_cpus(
             process_cpus,
             process_indexes,
@@ -365,6 +399,7 @@ class QuantizedEngine:
             },
             "source": self.source_metadata,
             "processes": processes,
+            "pidTable": pid_table,
             "cpus": cpus,
             "events": self.encode_sdt_events(window_start, window_end),
         }
@@ -484,14 +519,19 @@ class QuantizedEngine:
         key: ProcessKey,
         total_ns: int,
         scheduled_threads: Mapping[ThreadKey, int],
-        first_last: Tuple[int, int],
+        first_last: Optional[Tuple[int, int]],
     ) -> Mapping[str, object]:
         kind, pid, generation = key
         if kind == "kernel":
             name = "kernel and unknown"
             public_pid: Optional[int] = None
         else:
-            details = self.proc_info.get(pid)
+            # Snapshot metadata describes the latest PID generation only.
+            details = (
+                self.proc_info.get(pid)
+                if generation == self.public_generations.get(pid, 0)
+                else None
+            )
             process_name = basename(details.exe) if details and details.exe else None
             if not process_name and details and details.cmdline:
                 process_name = basename(details.cmdline[0])
@@ -543,8 +583,8 @@ class QuantizedEngine:
             "pid": public_pid,
             "name": name,
             "cpuMs": round(total_ns / NANOSECONDS_PER_MILLISECOND, 6),
-            "firstQuantum": first_last[0],
-            "lastQuantum": first_last[1],
+            "firstQuantum": first_last[0] if first_last else None,
+            "lastQuantum": first_last[1] if first_last else None,
             "threads": threads,
         }
         if kind != "kernel" and pid in self.proc_info:

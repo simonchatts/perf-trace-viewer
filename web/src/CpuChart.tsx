@@ -588,7 +588,8 @@ export function CpuChart({
                         event.timestampMs ?? hover.group.quantum * quantumMs,
                       )}
                     </time>{" "}
-                    {eventLabel(event.name, event.args, event.arg1)}
+                    {event.label ??
+                      eventLabel(event.name, event.args, event.arg1)}
                   </li>
                 ))}
               </ul>

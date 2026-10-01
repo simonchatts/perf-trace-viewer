@@ -151,9 +151,14 @@ class QuantizedEngineTests(unittest.TestCase):
         ]
         result = self.run_engine(lines)
         processes = cast(List[Mapping[str, object]], result["processes"])
+        pid_table = cast(List[Mapping[str, object]], result["pidTable"])
         cpus = cast(List[Mapping[str, object]], result["cpus"])
 
         self.assertEqual(processes, [])
+        self.assertEqual(pid_table[0]["pid"], 20)
+        self.assertEqual(pid_table[0]["name"], "tiny")
+        self.assertIsNone(pid_table[0]["visibleProcessIndex"])
+        self.assertEqual(pid_table[0]["cpuMs"], 40.0)
         self.assertEqual(cpus[0]["samples"], [[0, [[-1, 4.0]]]])
 
     def test_partial_final_quantum_uses_its_actual_duration(self) -> None:
@@ -190,6 +195,34 @@ class QuantizedEngineTests(unittest.TestCase):
             cpus[0]["samples"],
             [[0, [[0, 10.0]]], [1, [[-1, 4.0]]]],
         )
+
+    def test_metadata_only_pid_appears_in_full_table(self) -> None:
+        proc = ProcStat._make(
+            [80, "metadata-only", "S"]
+            + [0] * (len(ProcStat._fields) - 5)
+            + [None, None]
+        )
+        engine = QuantizedEngine(
+            skip_ns=0,
+            duration_ns=0,
+            quantum_ns=1_000_000_000,
+            squelch=5.0,
+            is_kernel=lambda _pid: False,
+            proc_info={80: proc},
+            source_metadata={},
+        )
+        result = engine.process(
+            [
+                switch(1.000, 0, 0, 0, "idle", 0, "idle"),
+                switch(2.000, 0, 0, 0, "idle", 0, "idle"),
+            ]
+        )
+        entry = cast(List[Mapping[str, object]], result["pidTable"])[0]
+        self.assertEqual(entry["pid"], 80)
+        self.assertEqual(entry["name"], "metadata-only")
+        self.assertEqual(entry["cpuMs"], 0.0)
+        self.assertIsNone(entry["firstQuantum"])
+        self.assertIsNone(entry["visibleProcessIndex"])
 
     def test_kernel_threads_share_one_process(self) -> None:
         lines = [
@@ -231,6 +264,7 @@ class QuantizedEngineTests(unittest.TestCase):
         ]
         result = self.run_engine(lines)
         processes = cast(List[Mapping[str, object]], result["processes"])
+        pid_table = cast(List[Mapping[str, object]], result["pidTable"])
 
         self.assertEqual(
             [
@@ -241,6 +275,10 @@ class QuantizedEngineTests(unittest.TestCase):
                 ("pid:60:1", "second", 200.0),
                 ("pid:60:0", "first", 100.0),
             ],
+        )
+        self.assertEqual(
+            [(entry["id"], entry["visibleProcessIndex"]) for entry in pid_table],
+            [("pid:60:0", 1), ("pid:60:1", 0)],
         )
 
     def test_proc_details_supply_display_name_and_attributes(self) -> None:

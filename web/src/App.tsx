@@ -4,6 +4,7 @@ import {
   type DragEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -11,11 +12,27 @@ import {
 import { CpuChart } from "./CpuChart";
 import { COLOR_HASH_SEED, formatDuration, validateTrace } from "./format";
 import { ProcessTable } from "./ProcessTable";
+import {
+  checkPluginSyntax,
+  compilePlugin,
+  PLUGIN_EXAMPLE,
+  PLUGIN_STORAGE_KEY,
+  transformSdtEvents,
+} from "./sdtPlugin";
 import type { QuantizedTrace } from "./types";
 
 type LoadState = "empty" | "loading" | "ready" | "error";
 
 const MAX_PIXELS_PER_QUANTUM = 100;
+
+// Read the browser-local plugin without making unavailable storage fatal.
+function storedPlugin(): string | null {
+  try {
+    return window.localStorage.getItem(PLUGIN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
 
 // Map pixel widths logarithmically so long traces retain useful slider control.
 function zoomToSliderValue(width: number, fitWidth: number): number {
@@ -54,8 +71,51 @@ export function App() {
   const [pixelsPerQuantum, setPixelsPerQuantum] = useState(1);
   const [colorHashSeed, setColorHashSeed] = useState(COLOR_HASH_SEED);
   const [showColorHashSeed, setShowColorHashSeed] = useState(false);
+  const [localPlugin, setLocalPlugin] = useState(storedPlugin);
+  const [pagePlugin, setPagePlugin] = useState<string | null>(null);
+  const [pagePluginError, setPagePluginError] = useState("");
+  const [pluginSource, setPluginSource] = useState(localPlugin ?? "");
+  const [pluginDraft, setPluginDraft] = useState("");
+  const [pluginOpen, setPluginOpen] = useState(false);
+  const [pluginError, setPluginError] = useState("");
   const previousFitWidth = useRef<number | null>(null);
   const seedLabelTimeout = useRef<number | null>(null);
+  const pluginView = useMemo(() => {
+    if (!trace) return { events: [], error: "" };
+    try {
+      return {
+        events: transformSdtEvents(trace, compilePlugin(pluginSource)),
+        error: "",
+      };
+    } catch (reason) {
+      return {
+        events: trace.events,
+        error: reason instanceof Error ? reason.message : String(reason),
+      };
+    }
+  }, [pluginSource, trace]);
+
+  // Open a fresh edit buffer so Cancel never changes the active plugin.
+  function openPluginEditor() {
+    setPluginDraft(pluginSource);
+    setPluginError("");
+    setPluginOpen(true);
+  }
+
+  // Validate code and loaded events before persisting and closing the editor.
+  function savePlugin() {
+    try {
+      const rules = compilePlugin(pluginDraft);
+      if (trace) transformSdtEvents(trace, rules);
+      window.localStorage.setItem(PLUGIN_STORAGE_KEY, pluginDraft);
+      setLocalPlugin(pluginDraft);
+      setPluginSource(pluginDraft);
+      setPluginError("");
+      setPluginOpen(false);
+    } catch (reason) {
+      setPluginError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
 
   // Clear the seed label timer if the app unmounts during its display period.
   useEffect(
@@ -79,6 +139,31 @@ export function App() {
           Math.max(0.001, oldFitWidth * 0.001);
       return wasFitted ? nextFitWidth : Math.max(nextFitWidth, currentWidth);
     });
+  }, []);
+
+  // Load the page-specified plugin as the active source when ?sdt= is present.
+  useEffect(() => {
+    const pluginUrl = new URLSearchParams(window.location.search).get("sdt");
+    if (!pluginUrl) return;
+    const controller = new AbortController();
+    fetch(pluginUrl, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok)
+          throw new Error(`Plugin request failed (${response.status}).`);
+        return response.text();
+      })
+      .then((source) => {
+        compilePlugin(source);
+        setPagePlugin(source);
+        setPluginSource(source);
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setPagePluginError(
+          reason instanceof Error ? reason.message : String(reason),
+        );
+      });
+    return () => controller.abort();
   }, []);
 
   // Load a URL supplied explicitly with ?data= for static deployments.
@@ -171,6 +256,13 @@ export function App() {
             </button>
           </div>
           <button
+            className="plugin-button"
+            type="button"
+            onClick={openPluginEditor}
+          >
+            SDT plugin
+          </button>
+          <button
             className="load-button"
             type="button"
             onClick={() => fileInput.current?.click()}
@@ -190,6 +282,21 @@ export function App() {
           }}
         />
       </header>
+
+      {pluginView.error && (
+        <div className="plugin-runtime-error" role="alert">
+          SDT plugin: {pluginView.error}{" "}
+          <button type="button" onClick={openPluginEditor}>
+            Edit plugin
+          </button>
+        </div>
+      )}
+
+      {pagePluginError && (
+        <div className="plugin-runtime-error" role="alert">
+          SDT plugin URL: {pagePluginError}
+        </div>
+      )}
 
       {state !== "ready" || !trace ? (
         <main
@@ -311,7 +418,7 @@ export function App() {
               colorHashSeed={colorHashSeed}
               cpus={trace.cpus}
               processes={trace.processes}
-              eventGroups={trace.events}
+              eventGroups={pluginView.events}
               quantumCount={trace.trace.quantumCount}
               quantumMs={trace.trace.quantumMs}
               pixelsPerQuantum={pixelsPerQuantum}
@@ -332,11 +439,93 @@ export function App() {
           <ProcessTable
             colorHashSeed={colorHashSeed}
             processes={trace.processes}
+            pidTable={trace.pidTable}
             quantumMs={trace.trace.quantumMs}
             selectedProcess={selectedProcess}
             onSelectProcess={setSelectedProcess}
           />
         </main>
+      )}
+      {pluginOpen && (
+        <div className="dialog-backdrop">
+          <section
+            className="plugin-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="plugin-title"
+          >
+            <h2 id="plugin-title">SDT event plugin</h2>
+            <p>
+              Enter a JavaScript array of rules. Category and name use full
+              globs (* and ?). Rules run in order; return null to try the next
+              rule. A result needs a category and display label.
+              <code>context.lookupPid(pid)</code> returns all matching processes
+              as an array of id, pid, and name objects.
+            </p>
+            <textarea
+              aria-label="Plugin JavaScript"
+              value={pluginDraft}
+              placeholder={PLUGIN_EXAMPLE}
+              spellCheck={false}
+              onChange={(event) => {
+                const source = event.target.value;
+                setPluginDraft(source);
+                try {
+                  checkPluginSyntax(source);
+                  setPluginError("");
+                } catch (reason) {
+                  setPluginError(
+                    reason instanceof Error ? reason.message : String(reason),
+                  );
+                }
+              }}
+            />
+            {pluginError && (
+              <p className="plugin-error" role="alert">
+                {pluginError}
+              </p>
+            )}
+            <div className="plugin-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setPluginDraft(PLUGIN_EXAMPLE);
+                  setPluginError("");
+                }}
+              >
+                Insert example
+              </button>
+              {pagePlugin !== null && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPluginDraft(pagePlugin);
+                    setPluginError("");
+                  }}
+                >
+                  Insert page version
+                </button>
+              )}
+              {localPlugin !== null && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPluginDraft(localPlugin);
+                    setPluginError("");
+                  }}
+                >
+                  Insert local version
+                </button>
+              )}
+              <button type="button" onClick={() => setPluginOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" onClick={savePlugin}>
+                Save locally
+              </button>
+            </div>
+          </section>
+        </div>
       )}
       {zoomLimitReached && (
         <div className="dialog-backdrop">

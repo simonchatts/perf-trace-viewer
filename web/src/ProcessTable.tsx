@@ -1,15 +1,16 @@
 /* Render sortable process metadata and detailed per-thread CPU totals. */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { formatDuration, formatQuantum, processColor } from "./format";
-import type { TraceProcess } from "./types";
+import type { PidTableEntry, TraceProcess } from "./types";
 
 type SortKey = "cpuMs" | "firstQuantum" | "lastQuantum";
 
 interface ProcessTableProps {
   colorHashSeed: number;
   processes: TraceProcess[];
+  pidTable?: PidTableEntry[];
   quantumMs: number;
   selectedProcess: number | null;
   onSelectProcess: (index: number | null) => void;
@@ -18,6 +19,7 @@ interface ProcessTableProps {
 export function ProcessTable({
   colorHashSeed,
   processes,
+  pidTable,
   quantumMs,
   selectedProcess,
   onSelectProcess,
@@ -25,24 +27,49 @@ export function ProcessTable({
   const [sortKey, setSortKey] = useState<SortKey>("cpuMs");
   const [ascending, setAscending] = useState(false);
   const [filter, setFilter] = useState("");
-  const selected = selectedProcess === null ? null : processes[selectedProcess];
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const allProcesses = useMemo(
+    () =>
+      pidTable ??
+      processes.map((process, index) => ({
+        ...process,
+        visibleProcessIndex: index,
+      })),
+    [pidTable, processes],
+  );
+  const selected =
+    allProcesses.find((process) => process.id === selectedId) ?? null;
+
+  // Follow selections made on the CPU chart while retaining hidden-row selection.
+  useEffect(() => {
+    if (selectedProcess !== null) {
+      setSelectedId(processes[selectedProcess]?.id ?? null);
+    }
+  }, [processes, selectedProcess]);
+
   const rows = useMemo(() => {
     const needle = filter.trim().toLocaleLowerCase();
-    return processes
-      .map((process, index) => ({ process, index }))
-      .filter(({ process }) =>
+    return allProcesses
+      .filter((process) =>
         `${process.name} ${process.pid ?? "kernel"}`
           .toLocaleLowerCase()
           .includes(needle),
       )
       .sort((left, right) => {
-        const difference = left.process[sortKey] - right.process[sortKey];
+        const difference = (left[sortKey] ?? -1) - (right[sortKey] ?? -1);
         return (
           (ascending ? difference : -difference) ||
-          left.process.name.localeCompare(right.process.name)
+          left.name.localeCompare(right.name)
         );
       });
-  }, [ascending, filter, processes, sortKey]);
+  }, [allProcesses, ascending, filter, sortKey]);
+
+  // Select a PID row and highlight it in the chart only when it has a segment.
+  function selectRow(process: PidTableEntry) {
+    const nextId = selectedId === process.id ? null : process.id;
+    setSelectedId(nextId);
+    onSelectProcess(nextId === null ? null : process.visibleProcessIndex);
+  }
 
   // Select a new sort or reverse the current column's direction.
   function sortBy(key: SortKey) {
@@ -64,7 +91,7 @@ export function ProcessTable({
       <div className="section-heading">
         <div>
           <p className="eyebrow">Process index</p>
-          <h2>Visible contributors</h2>
+          <h2>All known processes</h2>
         </div>
         <label className="search-field">
           <span>Filter</span>
@@ -80,17 +107,31 @@ export function ProcessTable({
         <div className="process-detail">
           <div className="detail-title">
             <i
-              style={{ background: processColor(selected.name, colorHashSeed) }}
+              className={
+                selected.visibleProcessIndex === null ? "empty-swatch" : ""
+              }
+              style={{
+                background:
+                  selected.visibleProcessIndex === null
+                    ? undefined
+                    : processColor(selected.name, colorHashSeed),
+              }}
             />
             <div>
               <strong>{selected.name}</strong>
               <span>
                 {selected.pid === null
                   ? "Kernel and unresolved work"
-                  : `PID ${selected.pid}`}
+                  : `PID ${selected.pid}${selected.visibleProcessIndex === null ? " · folded into Other or not scheduled" : ""}`}
               </span>
             </div>
-            <button type="button" onClick={() => onSelectProcess(null)}>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedId(null);
+                onSelectProcess(null);
+              }}
+            >
               Clear highlight
             </button>
           </div>
@@ -165,19 +206,20 @@ export function ProcessTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ process, index }) => (
+            {rows.map((process) => (
               <tr
                 key={process.id}
-                className={selectedProcess === index ? "selected" : ""}
-                onClick={() =>
-                  onSelectProcess(selectedProcess === index ? null : index)
-                }
+                className={selectedId === process.id ? "selected" : ""}
+                onClick={() => selectRow(process)}
               >
                 <td>
                   <i
-                    className="process-swatch"
+                    className={`process-swatch${process.visibleProcessIndex === null ? " empty-swatch" : ""}`}
                     style={{
-                      background: processColor(process.name, colorHashSeed),
+                      background:
+                        process.visibleProcessIndex === null
+                          ? undefined
+                          : processColor(process.name, colorHashSeed),
                     }}
                   />
                   <strong>{process.name}</strong>
@@ -185,10 +227,14 @@ export function ProcessTable({
                 <td className="numeric">{process.pid ?? "—"}</td>
                 <td className="numeric">{formatDuration(process.cpuMs)}</td>
                 <td className="numeric">
-                  {formatQuantum(process.firstQuantum, quantumMs)}
+                  {process.firstQuantum === null
+                    ? "—"
+                    : formatQuantum(process.firstQuantum, quantumMs)}
                 </td>
                 <td className="numeric">
-                  {formatQuantum(process.lastQuantum, quantumMs)}
+                  {process.lastQuantum === null
+                    ? "—"
+                    : formatQuantum(process.lastQuantum, quantumMs)}
                 </td>
               </tr>
             ))}
@@ -196,8 +242,8 @@ export function ProcessTable({
         </table>
       </div>
       <p className="table-note">
-        Only processes meeting the per-quantum squelch threshold appear here.
-        CPU totals include all of their scheduled time.
+        An empty colour marker means the process has no visible CPU segment. CPU
+        totals include time folded into Other.
       </p>
     </section>
   );
