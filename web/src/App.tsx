@@ -342,55 +342,58 @@ export function App() {
                     trace.source.system ||
                     "Scheduling trace"}
                 </h1>
-                <button
-                  className="trace-details-toggle"
-                  type="button"
-                  aria-expanded={showTraceDetails}
-                  aria-controls="trace-details"
-                  onClick={() => setShowTraceDetails((shown) => !shown)}
-                >
-                  {showTraceDetails ? "Hide details" : "Show details"}
-                </button>
               </div>
             </div>
-            <div className="header-actions">
-              <output
-                className={`seed-value${showColorHashSeed ? " visible" : ""}`}
-                aria-live="polite"
-              >
-                Colour seed {colorHashSeed}
-              </output>
-              <div className="seed-buttons" aria-label="Colour seed">
-                <button
-                  type="button"
-                  aria-label="Decrease colour seed"
-                  title="Decrease colour seed"
-                  onClick={() => changeColorHashSeed(-1)}
+            <div className="trace-toolbar">
+              <div className="header-actions">
+                <output
+                  className={`seed-value${showColorHashSeed ? " visible" : ""}`}
+                  aria-live="polite"
                 >
-                  ‹
+                  Colour seed {colorHashSeed}
+                </output>
+                <div className="seed-buttons" aria-label="Colour seed">
+                  <button
+                    type="button"
+                    aria-label="Decrease colour seed"
+                    title="Decrease colour seed"
+                    onClick={() => changeColorHashSeed(-1)}
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Increase colour seed"
+                    title="Increase colour seed"
+                    onClick={() => changeColorHashSeed(1)}
+                  >
+                    ›
+                  </button>
+                </div>
+                <button
+                  className="plugin-button"
+                  type="button"
+                  onClick={openPluginEditor}
+                >
+                  SDT plugin
                 </button>
                 <button
+                  className="load-button"
                   type="button"
-                  aria-label="Increase colour seed"
-                  title="Increase colour seed"
-                  onClick={() => changeColorHashSeed(1)}
+                  onClick={() => fileInput.current?.click()}
                 >
-                  ›
+                  Load dataset
                 </button>
               </div>
               <button
-                className="plugin-button"
+                className="trace-details-toggle"
                 type="button"
-                onClick={openPluginEditor}
+                aria-expanded={showTraceDetails}
+                aria-controls="trace-details"
+                aria-label={showTraceDetails ? "Hide trace details" : "Show trace details"}
+                onClick={() => setShowTraceDetails((shown) => !shown)}
               >
-                SDT plugin
-              </button>
-              <button
-                className="load-button"
-                type="button"
-                onClick={() => fileInput.current?.click()}
-              >
-                Load dataset
+                Details
               </button>
             </div>
             <div

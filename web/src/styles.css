@@ -218,20 +218,44 @@ button:disabled {
   align-items: start;
   margin-bottom: 26px;
 }
-.trace-heading > .header-actions {
+.trace-toolbar {
   align-self: start;
   justify-self: end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
 }
 .trace-title-line {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 4px 12px;
 }
 .trace-details-toggle {
-  padding: 4px 7px;
+  padding: 0;
+  border-color: transparent;
   color: #91aabd;
+  background: transparent;
   font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.trace-details-toggle::before {
+  content: "▶";
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 13px;
+  line-height: 0.7;
+  transition: transform 160ms ease;
+}
+.trace-details-toggle[aria-expanded="true"]::before {
+  transform: rotate(90deg);
+}
+.trace-details-toggle:hover {
+  border-color: transparent;
+  color: #02c8ff;
+  background: transparent;
 }
 .trace-details {
   grid-column: 1 / -1;
@@ -742,7 +766,7 @@ th:not(:first-child) {
   .trace-heading {
     grid-template-columns: minmax(0, 1fr);
   }
-  .trace-heading > .header-actions {
+  .trace-toolbar {
     justify-self: end;
     flex-wrap: wrap;
   }
