@@ -31,6 +31,9 @@ STAT = re.compile(r"^(\d+) \((.*)\) (\w) ([\d -]+)$")
 # Optional executable path and command-line bytes emitted after a stat record.
 PROC_DETAILS = re.compile(r"^## proc (\d+) ([0-9a-f]*) ([0-9a-f]*)$")
 
+# Length-framed collector output can contain any number of lines or comments.
+EXTRA_STREAM = re.compile(r"^## extra-(stdout|stderr)-bytes: (\d+)$")
+
 # Named tuple for the fields in /proc/<pid>/stat. Thanks, CoPilot!
 # fmt: off
 ProcStat = namedtuple("ProcStat", (
@@ -66,7 +69,19 @@ def parse_mdata(raw_input: IO[bytes]) -> Tuple[Dict[str, str], Dict[int, ProcSta
     procs: Dict[int, ProcStat] = {}
     for rawline in raw_input:
         line = rawline.decode("utf-8")
-        if line.startswith("## proc "):
+        extra_stream = EXTRA_STREAM.match(line.rstrip("\n"))
+        if extra_stream is not None:
+            name = extra_stream.group(1)
+            size = int(extra_stream.group(2))
+            payload = raw_input.read(size)
+            if len(payload) != size:
+                raise ValueError(f"Truncated extra-{name} metadata")
+            if raw_input.read(1) != b"\n":
+                raise ValueError(f"Malformed extra-{name} metadata separator")
+            mdata[f"extra-{name}"] = payload.decode(
+                "utf-8", errors="surrogateescape"
+            )
+        elif line.startswith("## proc "):
             details = PROC_DETAILS.match(line.rstrip("\n"))
             assert details is not None
             pid = int(details.group(1))
@@ -84,7 +99,8 @@ def parse_mdata(raw_input: IO[bytes]) -> Tuple[Dict[str, str], Dict[int, ProcSta
             # Key-value pair
             match line.split(":", maxsplit=1):
                 case key, val:
-                    mdata[key[2:]] = val.strip()
+                    key = key[2:]
+                    mdata[key] = val.strip()
         else:
             # Line from /proc/<pid>/stat. There are two sets of these: one set
             # following a `## before` comment, from before the `perf sched

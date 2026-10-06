@@ -23,6 +23,7 @@
 # Examples:
 #   ./collect 10
 #   ./collect --buildid-dir /tmp/perf-cache --sdt-object /path/to/app 10
+#   ./collect --extra 'ssh 172.0.0.1 "date; date; date"' 10
 
 ###############################################################################
 # Command-line options
@@ -42,6 +43,7 @@ usage()
     echo "  -p, --preserve       preserve raw perf.data file"
     echo "  -c, --compressor     specify gzip compression (the only supported value)"
     echo "  -o, --other-opts     pass the additional opts to perf sched record"
+    echo "      --extra          run a shell command immediately before recording"
     echo "      --buildid-dir    optional directory for the temporary perf cache"
     echo "      --sdt-object     ELF object whose embedded SDT probes should be recorded"
     echo "                       (may be specified more than once)"
@@ -62,6 +64,10 @@ duration=0
 other_opts=""
 buildid_dir=""
 sdt_objects=()
+extra_requested=0
+extra_command=""
+extra_stdout_file=""
+extra_stderr_file=""
 
 # Append an SDT object while retaining whitespace in its path.
 append_sdt_object()
@@ -90,6 +96,9 @@ process_opts()
             --sdt-object)
                 [ $# -ge 2 ] || usage "Missing value for $1"
                 shift; append_sdt_object "$1"; shift;;
+            --extra)
+                [ $# -ge 2 ] || usage "Missing value for $1"
+                shift; extra_requested=1; extra_command="$1"; shift;;
             *[!0-9]*|'') usage "Invalid argument: $1";;
             *) duration="$1"; shift;;
         esac
@@ -295,6 +304,8 @@ cleanup()
     local event
 
     rm -f "$perf_script_status_file"
+    [ -z "$extra_stdout_file" ] || rm -f "$extra_stdout_file"
+    [ -z "$extra_stderr_file" ] || rm -f "$extra_stderr_file"
     for event in "${sdt_probes_added[@]}"; do
         run_sdt_perf probe --del="$event" >/dev/null 2>&1
     done
@@ -413,6 +424,19 @@ create_mdata()
 # perf-version: $perf_version
 # perf-sched-cmd: $perf_sched_record_cmd
 # perf-script-cmd: $perf_script_cmd
+EOF
+    if [ "$extra_requested" -eq 1 ]; then
+        printf '# extra-command: %s\n# extra-exit-code: %s\n' \
+            "$extra_command" "$extra_exit_code"
+        printf '## extra-stdout-bytes: %s\n' \
+            "$(wc -c < "$extra_stdout_file" | tr -d '[:space:]')"
+        cat "$extra_stdout_file"
+        printf '\n## extra-stderr-bytes: %s\n' \
+            "$(wc -c < "$extra_stderr_file" | tr -d '[:space:]')"
+        cat "$extra_stderr_file"
+        printf '\n## extra-end\n'
+    fi
+    cat <<EOF
 ## before
 $before
 ## after
@@ -471,6 +495,13 @@ setup_sdt_probes
 
 # Record the system
 echo "Collecting $duration seconds of data at $(date '+%Y-%m-%d %H:%M:%S %z')..."
+if [ "$extra_requested" -eq 1 ]; then
+    # Keep streams in files to preserve their bytes, including trailing newlines.
+    extra_stdout_file=$(mktemp)
+    extra_stderr_file=$(mktemp)
+    bash -c "$extra_command" >"$extra_stdout_file" 2>"$extra_stderr_file"
+    extra_exit_code=$?
+fi
 run_perf_sched_record
 
 # Get the "after" process info
