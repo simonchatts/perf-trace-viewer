@@ -45,51 +45,31 @@ button {
 }
 
 .app-header {
-  height: 78px;
-  padding: 0 clamp(20px, 4vw, 58px);
+  min-height: 56px;
+  padding: 8px clamp(16px, 4vw, 58px);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   border-bottom: 1px solid rgba(129, 177, 207, 0.16);
   background: rgba(7, 24, 45, 0.82);
   backdrop-filter: blur(16px);
 }
 
-.brand {
-  display: flex;
-  gap: 13px;
-  align-items: center;
-}
-.brand img {
-  filter: drop-shadow(0 0 12px rgba(2, 200, 255, 0.22));
-}
-.brand div {
-  display: grid;
-  line-height: 1.2;
-}
-.brand span {
-  color: #7d9aad;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-}
-.brand strong {
-  color: #f1fcff;
-  font-size: 16px;
+.app-header-empty {
+  display: none;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 .seed-value {
-  min-width: 148px;
+  min-width: 112px;
   color: #a9c0cf;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   text-align: right;
   opacity: 0;
@@ -103,11 +83,11 @@ button {
   display: flex;
 }
 .seed-buttons button {
-  width: 34px;
-  height: 38px;
+  width: 27px;
+  height: 30px;
   padding: 0;
   border-radius: 0;
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1;
 }
 .seed-buttons button:first-child {
@@ -127,6 +107,10 @@ button,
   background: rgba(10, 96, 255, 0.2);
   font-weight: 700;
 }
+.header-actions > button {
+  padding: 6px 9px;
+  font-size: 11px;
+}
 button:hover {
   border-color: #02c8ff;
   background: rgba(10, 96, 255, 0.32);
@@ -137,7 +121,7 @@ button:disabled {
 }
 
 .welcome {
-  min-height: calc(100vh - 78px);
+  min-height: calc(100vh - 56px);
   padding: 40px 20px;
   display: grid;
   place-items: center;
@@ -228,11 +212,36 @@ button:disabled {
   padding: 38px clamp(16px, 3vw, 46px) 70px;
 }
 .trace-heading {
-  display: flex;
-  gap: 32px;
-  justify-content: space-between;
-  align-items: end;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px 24px;
+  align-items: start;
   margin-bottom: 26px;
+}
+.trace-heading > .header-actions {
+  align-self: start;
+  justify-self: end;
+}
+.trace-title-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.trace-details-toggle {
+  padding: 4px 7px;
+  color: #91aabd;
+  font-size: 10px;
+}
+.trace-details {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.trace-details[hidden] {
+  display: none;
 }
 .trace-heading h1 {
   max-width: 780px;
@@ -244,7 +253,7 @@ button:disabled {
 .trace-heading .trace-meta {
   display: grid;
   gap: 4px;
-  margin-top: 8px;
+  margin-top: 0;
 }
 .trace-heading .trace-meta p {
   margin: 0;
@@ -715,12 +724,9 @@ th:not(:first-child) {
 
 @media (max-width: 800px) {
   .app-header {
-    height: 68px;
+    min-height: 56px;
   }
-  .brand span {
-    display: none;
-  }
-  .seed-value {
+  .app-header .seed-value {
     position: absolute;
     top: 72px;
     right: 20px;
@@ -729,10 +735,21 @@ th:not(:first-child) {
     border-radius: 6px;
     background: rgba(7, 24, 45, 0.92);
   }
-  .trace-heading,
   .section-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+  .trace-heading {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .trace-heading > .header-actions {
+    justify-self: end;
+    flex-wrap: wrap;
+  }
+  .trace-details {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
   }
   .trace-stats {
     display: grid;
@@ -756,17 +773,14 @@ th:not(:first-child) {
 
 @media (max-width: 600px) {
   .app-header {
-    padding: 0 10px;
-  }
-  .brand div {
-    display: none;
+    padding: 8px 10px;
   }
   .header-actions {
     gap: 5px;
   }
   .header-actions > button {
-    padding: 8px;
-    font-size: 12px;
+    padding: 6px 8px;
+    font-size: 10px;
   }
   .plugin-actions {
     flex-wrap: wrap;

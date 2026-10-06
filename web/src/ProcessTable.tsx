@@ -104,7 +104,13 @@ export function ProcessTable({
       </div>
 
       {selected && (
-        <div className="process-detail">
+        <div
+          className="process-detail"
+          onClick={() => {
+            setSelectedId(null);
+            onSelectProcess(null);
+          }}
+        >
           <div className="detail-title">
             <i
               className={
@@ -127,10 +133,6 @@ export function ProcessTable({
             </div>
             <button
               type="button"
-              onClick={() => {
-                setSelectedId(null);
-                onSelectProcess(null);
-              }}
             >
               Clear highlight
             </button>

@@ -66,6 +66,7 @@ export function App() {
   const [error, setError] = useState("");
   const [datasetName, setDatasetName] = useState("");
   const [selectedProcess, setSelectedProcess] = useState<number | null>(null);
+  const [showTraceDetails, setShowTraceDetails] = useState(false);
   const [zoomLimitReached, setZoomLimitReached] = useState(false);
   const [fitPixelsPerQuantum, setFitPixelsPerQuantum] = useState(1);
   const [pixelsPerQuantum, setPixelsPerQuantum] = useState(1);
@@ -222,54 +223,51 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <div className="brand">
-          <img src="./icon.svg" alt="" width="42" height="42" />
-          <div>
-            <span>Perf Trace Viewer</span>
-            <strong>Quantized CPU atlas</strong>
-          </div>
-        </div>
-        <div className="header-actions">
-          <output
-            className={`seed-value${showColorHashSeed ? " visible" : ""}`}
-            aria-live="polite"
-          >
-            Colour seed {colorHashSeed}
-          </output>
-          <div className="seed-buttons" aria-label="Colour seed">
-            <button
-              type="button"
-              aria-label="Decrease colour seed"
-              title="Decrease colour seed"
-              onClick={() => changeColorHashSeed(-1)}
+      <header
+        className={`app-header${state === "ready" && trace ? " app-header-empty" : ""}`}
+      >
+        {(!trace || state !== "ready") && (
+          <div className="header-actions">
+            <output
+              className={`seed-value${showColorHashSeed ? " visible" : ""}`}
+              aria-live="polite"
             >
-              ‹
+              Colour seed {colorHashSeed}
+            </output>
+            <div className="seed-buttons" aria-label="Colour seed">
+              <button
+                type="button"
+                aria-label="Decrease colour seed"
+                title="Decrease colour seed"
+                onClick={() => changeColorHashSeed(-1)}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                aria-label="Increase colour seed"
+                title="Increase colour seed"
+                onClick={() => changeColorHashSeed(1)}
+              >
+                ›
+              </button>
+            </div>
+            <button
+              className="plugin-button"
+              type="button"
+              onClick={openPluginEditor}
+            >
+              SDT plugin
             </button>
             <button
+              className="load-button"
               type="button"
-              aria-label="Increase colour seed"
-              title="Increase colour seed"
-              onClick={() => changeColorHashSeed(1)}
+              onClick={() => fileInput.current?.click()}
             >
-              ›
+              Load dataset
             </button>
           </div>
-          <button
-            className="plugin-button"
-            type="button"
-            onClick={openPluginEditor}
-          >
-            SDT plugin
-          </button>
-          <button
-            className="load-button"
-            type="button"
-            onClick={() => fileInput.current?.click()}
-          >
-            Load dataset
-          </button>
-        </div>
+        )}
         <input
           ref={fileInput}
           type="file"
@@ -338,34 +336,91 @@ export function App() {
           <section className="trace-heading">
             <div>
               <p className="eyebrow">{datasetName}</p>
-              <h1>
-                {trace.source.title ||
-                  trace.source.system ||
-                  "Scheduling trace"}
-              </h1>
+              <div className="trace-title-line">
+                <h1>
+                  {trace.source.title ||
+                    trace.source.system ||
+                    "Scheduling trace"}
+                </h1>
+                <button
+                  className="trace-details-toggle"
+                  type="button"
+                  aria-expanded={showTraceDetails}
+                  aria-controls="trace-details"
+                  onClick={() => setShowTraceDetails((shown) => !shown)}
+                >
+                  {showTraceDetails ? "Hide details" : "Show details"}
+                </button>
+              </div>
+            </div>
+            <div className="header-actions">
+              <output
+                className={`seed-value${showColorHashSeed ? " visible" : ""}`}
+                aria-live="polite"
+              >
+                Colour seed {colorHashSeed}
+              </output>
+              <div className="seed-buttons" aria-label="Colour seed">
+                <button
+                  type="button"
+                  aria-label="Decrease colour seed"
+                  title="Decrease colour seed"
+                  onClick={() => changeColorHashSeed(-1)}
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  aria-label="Increase colour seed"
+                  title="Increase colour seed"
+                  onClick={() => changeColorHashSeed(1)}
+                >
+                  ›
+                </button>
+              </div>
+              <button
+                className="plugin-button"
+                type="button"
+                onClick={openPluginEditor}
+              >
+                SDT plugin
+              </button>
+              <button
+                className="load-button"
+                type="button"
+                onClick={() => fileInput.current?.click()}
+              >
+                Load dataset
+              </button>
+            </div>
+            <div
+              className="trace-details"
+              id="trace-details"
+              hidden={!showTraceDetails}
+            >
               <div className="trace-meta">
                 <p>{trace.source.date || "Quantized scheduling data"}</p>
                 {trace.source.title && trace.source.system && (
                   <p>{trace.source.system}</p>
                 )}
               </div>
-            </div>
-            <div className="trace-stats">
-              <div>
-                <span>Duration</span>
-                <strong>{formatDuration(trace.trace.durationMs)}</strong>
-              </div>
-              <div>
-                <span>Quantum</span>
-                <strong>{formatDuration(trace.trace.quantumMs)}</strong>
-              </div>
-              <div>
-                <span>CPUs</span>
-                <strong>{trace.cpus.length}</strong>
-              </div>
-              <div>
-                <span>Processes</span>
-                <strong>{trace.processes.length}</strong>
+              <div className="trace-stats">
+                <div>
+                  <span>Duration</span>
+                  <strong>{formatDuration(trace.trace.durationMs)}</strong>
+                </div>
+                <div>
+                  <span>Quantum</span>
+                  <strong>{formatDuration(trace.trace.quantumMs)}</strong>
+                </div>
+                <div>
+                  <span>CPUs</span>
+                  <strong>{trace.cpus.length}</strong>
+                </div>
+                <div>
+                  <span>Processes</span>
+                  <strong>{trace.processes.length}</strong>
+                </div>
               </div>
             </div>
           </section>
