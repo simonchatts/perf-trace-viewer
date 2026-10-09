@@ -390,7 +390,9 @@ export function App() {
                 type="button"
                 aria-expanded={showTraceDetails}
                 aria-controls="trace-details"
-                aria-label={showTraceDetails ? "Hide trace details" : "Show trace details"}
+                aria-label={
+                  showTraceDetails ? "Hide trace details" : "Show trace details"
+                }
                 onClick={() => setShowTraceDetails((shown) => !shown)}
               >
                 Details

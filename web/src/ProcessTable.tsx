@@ -131,11 +131,7 @@ export function ProcessTable({
                   : `PID ${selected.pid}${selected.visibleProcessIndex === null ? " · folded into Other or not scheduled" : ""}`}
               </span>
             </div>
-            <button
-              type="button"
-            >
-              Clear highlight
-            </button>
+            <button type="button">Clear highlight</button>
           </div>
           {(selected.comm ||
             selected.executable ||
